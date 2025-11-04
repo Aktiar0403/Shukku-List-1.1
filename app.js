@@ -1,177 +1,328 @@
-import { db, auth } from './firebase-config.js';
-import { doc, getDoc, onSnapshot, updateDoc, arrayUnion, setDoc } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
-import { logout } from './auth.js';
+/* app.js
+  - Requires firebase-config.js (exports app, auth, db)
+  - Uses modular Firebase SDK via CDN imports (or your bundler)
+  - Stores FCM tokens per-user (collection: users/{uid}.tokens array)
+  - Calls /api/fetchMetadata for OG previews
+  - Calls /api/sendNotification on add/complete to notify partner
+*/
 
-const uid = localStorage.getItem('uid');
-if (!uid) {
-  window.location.href = 'login.html';
-}
+/* ---------- Imports ---------- */
+import { app, auth, db } from './firebase-config.js';
 
-const listId = localStorage.getItem('listId');
-const listContainer = document.getElementById('listContainer');
-const itemInput = document.getElementById('itemInput');
-const qtyInput = document.getElementById('qtyInput');
+import {
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  onSnapshot,
+  arrayUnion,
+  arrayRemove,
+  getDocs,
+  query,
+  where
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+import {
+  getMessaging,
+  getToken,
+  onMessage
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-messaging.js";
+
+/* ---------- Config ---------- */
+// Fill your VAPID key (get it from Firebase Console > Cloud Messaging)
+const VAPID_KEY = "YOUR_PUBLIC_VAPID_KEY_HERE";
+
+/* ---------- DOM Elements (adjust selectors to your HTML) ---------- */
+const inputEl = document.getElementById('itemInput');
+const qtyEl = document.getElementById('qtyInput');
 const addBtn = document.getElementById('addBtn');
+const listContainer = document.getElementById('listContainer');
 const inviteBtn = document.getElementById('inviteBtn');
 const inviteModal = document.getElementById('inviteModal');
 const inviteCodeEl = document.getElementById('inviteCode');
-const copyInvite = document.getElementById('copyInvite');
-const closeInvite = document.getElementById('closeInvite');
-const partnerBadge = document.getElementById('partnerBadge');
-const progressText = document.getElementById('progressText');
-const progressBar = document.getElementById('progressBar');
-const ogPreview = document.getElementById('ogPreview');
-const clearDone = document.getElementById('clearDone');
+const copyInviteBtn = document.getElementById('copyInvite');
+const closeInviteBtn = document.getElementById('closeInvite');
 const logoutBtn = document.getElementById('logoutBtn');
+const clearDoneBtn = document.getElementById('clearDone');
+const partnerBadge = document.getElementById('partnerBadge');
 
-if (logoutBtn) logoutBtn.addEventListener('click', logout);
-
-let currentListId = listId || null;
-
-async function init() {
-  if (!currentListId) {
-    // if no listId, assume user is owner and uses their uid as list id
-    currentListId = uid;
-    localStorage.setItem('listId', currentListId);
-    // ensure doc exists
-    const docRef = doc(db, 'lists', currentListId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      await setDoc(docRef, { users: [uid], items: [], inviteCode: Math.floor(100000 + Math.random() * 900000).toString(), createdAt: Date.now() });
-    }
-  }
-  listen();
-  requestNotificationPermission();
+/* ---------- Helper utils ---------- */
+function uidToPairId(uid) {
+  // using owner's uid as pair id (simple deterministic approach)
+  return uid;
 }
 
-function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission !== 'granted') {
-    Notification.requestPermission();
-  }
-}
-
-function showNotification(title, body) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body });
-  }
-}
-
-function renderList(items) {
-  listContainer.innerHTML = '';
-  const total = items.length;
-  const doneCount = items.filter(i => i.done).length;
-  progressText.textContent = `${doneCount} of ${total} items`;
-  progressBar.style.width = total ? Math.round((doneCount/total)*100) + '%' : '0%';
-  items.forEach((it, idx) => {
-    const li = document.createElement('li');
-    li.className = 'p-3 bg-white rounded shadow flex justify-between items-center';
-    const left = document.createElement('div');
-    left.innerHTML = `<div class="font-medium">${it.name}</div><div class="text-sm text-gray-500">Qty: ${it.qty} • ${it.addedByName || it.addedBy}</div>`;
-    const right = document.createElement('div');
-    right.innerHTML = `<button data-idx="${idx}" class="toggleDone mr-2 text-green-600">✓</button><button data-idx="${idx}" class="deleteItem text-red-600">✕</button>`;
-    li.appendChild(left);
-    li.appendChild(right);
-    listContainer.appendChild(li);
-  });
-}
-
-async function listen() {
-  const docRef = doc(db, 'lists', currentListId);
-  onSnapshot(docRef, (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const items = data.items || [];
-    renderList(items);
-    inviteCodeEl.textContent = data.inviteCode || '—';
-    partnerBadge.textContent = `Partner: ${data.users && data.users.length>1 ? 'Connected' : 'Not connected'}`;
-    partnerBadge.classList.remove('hidden');
-  });
-}
-
-async function addItem() {
-  const raw = itemInput.value.trim();
-  const qty = qtyInput.value || 1;
-  if (!raw) return;
-  let item = { name: raw, qty: qty, addedBy: uid, done:false, createdAt: Date.now() };
-  // try to detect URL
-  try {
-    const url = new URL(raw);
-    // fetch og metadata via a public CORS proxy (may fail). Production: use serverless proxy.
-    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url.href);
-    const res = await fetch(proxy);
-    if (res.ok) {
-      const text = await res.text();
-      // naive title extraction
-      const m = text.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || text.match(/<title>([^<]+)<\/title>/i);
-      if (m) item.name = m[1].trim();
-      // try to get image
-      const mi = text.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-      if (mi) item.image = mi[1];
-      item.productUrl = url.href;
-    }
-  } catch(e) {
-    // not a URL
-  }
-  // save to firestore
-  const docRef = doc(db, 'lists', currentListId);
-  const snap = await getDoc(docRef);
-  const data = snap.data();
-  const newItems = data.items ? [...data.items, item] : [item];
-  await updateDoc(docRef, { items: newItems });
-  itemInput.value = ''; qtyInput.value = 1;
-  showNotification('Item added', `${item.name} added to list`);
-}
-// Fetch product metadata from your Vercel API route
 async function fetchProductPreview(url) {
   try {
-    const response = await fetch(`/api/fetchMetadata?url=${encodeURIComponent(url)}`);
-    const data = await response.json();
-    console.log("Fetched metadata:", data);
-    return data;
-  } catch (error) {
-    console.error("Error fetching product preview:", error);
+    const res = await fetch(`/api/fetchMetadata?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn("Preview fetch failed:", e);
     return null;
   }
 }
 
-// delegate clicks
-document.body.addEventListener('click', async (e) => {
-  if (e.target.matches('#addBtn')) await addItem();
-  if (e.target.matches('.toggleDone')) {
-    const idx = +e.target.dataset.idx;
-    const docRef = doc(db, 'lists', currentListId);
-    const snap = await getDoc(docRef); const data = snap.data(); const items = data.items || [];
-    items[idx].done = !items[idx].done;
-    await updateDoc(docRef, { items });
-    showNotification('Item updated', `Marked ${items[idx].done ? 'done' : 'not done'}: ${items[idx].name}`);
+/* ---------- FCM: register token and store in Firestore ---------- */
+async function registerFCMToken(uid) {
+  try {
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    if (!token) return null;
+    // store token in users/{uid} -> tokens array
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      await setDoc(userRef, { tokens: [token], createdAt: Date.now() });
+    } else {
+      await updateDoc(userRef, { tokens: arrayUnion(token) });
+    }
+    return token;
+  } catch (e) {
+    console.warn("FCM token registration failed:", e);
+    return null;
   }
-  if (e.target.matches('.deleteItem')) {
-    const idx = +e.target.dataset.idx;
-    const docRef = doc(db, 'lists', currentListId);
-    const snap = await getDoc(docRef); const data = snap.data(); const items = data.items || [];
-    const removed = items.splice(idx,1);
-    await updateDoc(docRef, { items });
-    showNotification('Item removed', `${removed[0].name} removed`);
+}
+
+/* ---------- Call server to send notification ---------- */
+async function triggerSendNotification(pairId, payload) {
+  // payload: { title, body, excludeUid (optional) }
+  try {
+    await fetch('/api/sendNotification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pairId, payload })
+    });
+  } catch (e) {
+    console.warn('sendNotification failed', e);
   }
-  if (e.target.matches('#inviteBtn')) {
-    inviteModal.classList.remove('hidden');
+}
+
+/* ---------- Firestore list flow ---------- */
+let currentUid = null;
+let currentPairId = null;
+
+async function ensurePairDocExists(pairId, uid) {
+  const pairRef = doc(db, 'pairs', pairId);
+  const snap = await getDoc(pairRef);
+  if (!snap.exists()) {
+    await setDoc(pairRef, {
+      users: [uid],
+      items: [],
+      inviteCode: (Math.floor(100000 + Math.random()*900000)).toString(),
+      createdAt: Date.now()
+    });
   }
-  if (e.target.matches('#closeInvite')) inviteModal.classList.add('hidden');
-  if (e.target.matches('#copyInvite')) {
-    navigator.clipboard.writeText(inviteCodeEl.textContent || '');
-    alert('Invite code copied');
+}
+
+/* Render function for list items (items stored as array in document) */
+function renderListItems(items) {
+  listContainer.innerHTML = '';
+  items.forEach((it, idx) => {
+    const li = document.createElement('li');
+    li.className = 'p-3 bg-white rounded shadow flex justify-between items-center';
+
+    const leftHtml = [];
+    if (it.image) {
+      leftHtml.push(`<img src="${it.image}" class="w-12 h-12 rounded mr-3" alt="img">`);
+    }
+    leftHtml.push(`<div>
+      ${it.link ? `<a href="${it.link}" target="_blank" class="font-semibold text-blue-600">${it.name}</a>` : `<div class="font-semibold">${it.name}</div>`}
+      <div class="text-xs text-gray-500">Qty: ${it.qty || 1} • ${it.addedBy || ''}</div>
+    </div>`);
+
+    li.innerHTML = `
+      <div class="flex items-center">${leftHtml.join('')}</div>
+      <div class="flex items-center space-x-2">
+        <button class="toggle-done text-sm" data-idx="${idx}">${it.done ? '✅' : '🛒'}</button>
+        <button class="delete-item text-red-500 text-sm" data-idx="${idx}">✕</button>
+      </div>
+    `;
+    listContainer.appendChild(li);
+  });
+
+  // Attach listeners
+  listContainer.querySelectorAll('.toggle-done').forEach(btn => {
+    btn.onclick = async (e) => {
+      const idx = +e.target.dataset.idx;
+      await toggleDone(idx);
+    };
+  });
+  listContainer.querySelectorAll('.delete-item').forEach(btn => {
+    btn.onclick = async (e) => {
+      const idx = +e.target.dataset.idx;
+      await deleteItem(idx);
+    };
+  });
+}
+
+/* ---------- Firestore CRUD helpers (storing items as array inside pairs/{pairId}) ---------- */
+async function addItem(rawText, qty = 1) {
+  if (!currentPairId || !currentUid) return;
+  let item = { name: rawText, qty, addedBy: currentUid, done: false, createdAt: Date.now() };
+
+  // If URL, fetch preview
+  try {
+    const parsed = new URL(rawText);
+    const meta = await fetchProductPreview(parsed.href);
+    if (meta) {
+      item.name = meta.title || item.name;
+      if (meta.image) item.image = meta.image;
+      item.link = meta.url || parsed.href;
+      if (meta.price) item.price = meta.price;
+      item.site = meta.site;
+    } else {
+      item.link = parsed.href;
+    }
+  } catch (e) {
+    // not a URL
   }
-  if (e.target.matches('#clearDone')) {
-    const docRef = doc(db, 'lists', currentListId);
-    const snap = await getDoc(docRef); const data = snap.data(); const items = data.items || [];
-    const filtered = items.filter(i => !i.done);
-    await updateDoc(docRef, { items: filtered });
-  }
+
+  const pairRef = doc(db, 'pairs', currentPairId);
+  const snap = await getDoc(pairRef);
+  const data = snap.exists() ? snap.data() : { items: [] };
+  const items = data.items || [];
+  items.push(item);
+  await updateDoc(pairRef, { items });
+
+  // notify partner(s)
+  await triggerSendNotification(currentPairId, {
+    title: 'Item added',
+    body: `${item.name} added to list`,
+    excludeUid: currentUid
+  });
+}
+
+async function toggleDone(index) {
+  const pairRef = doc(db, 'pairs', currentPairId);
+  const snap = await getDoc(pairRef);
+  if (!snap.exists()) return;
+  const items = snap.data().items || [];
+  if (!items[index]) return;
+  items[index].done = !items[index].done;
+  await updateDoc(pairRef, { items });
+
+  // notify
+  await triggerSendNotification(currentPairId, {
+    title: items[index].done ? 'Item bought' : 'Item marked undone',
+    body: `${items[index].name} ${items[index].done ? 'was bought' : 'is marked not bought'}`,
+    excludeUid: currentUid
+  });
+}
+
+async function deleteItem(index) {
+  const pairRef = doc(db, 'pairs', currentPairId);
+  const snap = await getDoc(pairRef);
+  if (!snap.exists()) return;
+  const items = snap.data().items || [];
+  const removed = items.splice(index, 1);
+  await updateDoc(pairRef, { items });
+  // notify partner
+  await triggerSendNotification(currentPairId, {
+    title: 'Item removed',
+    body: `${removed[0]?.name || 'An item'} was removed`,
+    excludeUid: currentUid
+  });
+}
+
+async function clearCompleted() {
+  const pairRef = doc(db, 'pairs', currentPairId);
+  const snap = await getDoc(pairRef);
+  if (!snap.exists()) return;
+  const items = snap.data().items || [];
+  const filtered = items.filter(i => !i.done);
+  await updateDoc(pairRef, { items: filtered });
+}
+
+/* ---------- Listener that watches the pair doc for realtime updates ---------- */
+function watchPairDoc(pairId) {
+  const pairRef = doc(db, 'pairs', pairId);
+  onSnapshot(pairRef, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    renderListItems(data.items || []);
+    // update invite code UI
+    if (inviteCodeEl) inviteCodeEl.textContent = data.inviteCode || '—';
+    if (partnerBadge) {
+      const connected = (data.users && data.users.length > 1);
+      partnerBadge.textContent = connected ? 'Partner: Connected' : 'Partner: Not connected';
+      partnerBadge.classList.remove('hidden');
+    }
+  });
+}
+
+/* ---------- Notification click handlers (foreground) ---------- */
+function setupOnMessage() {
+  const messaging = getMessaging(app);
+  onMessage(messaging, (payload) => {
+    // handle foreground messages
+    if (payload && payload.notification) {
+      const { title, body } = payload.notification;
+      // Show in-app toast or notification
+      try {
+        if (Notification.permission === 'granted') {
+          new Notification(title, { body });
+        }
+      } catch (e) {}
+    }
+  });
+}
+
+/* ---------- Event bindings ---------- */
+if (addBtn) {
+  addBtn.addEventListener('click', async () => {
+    const raw = inputEl.value.trim();
+    if (!raw) return;
+    const qty = parseInt(qtyEl?.value || 1, 10) || 1;
+    await addItem(raw, qty);
+    inputEl.value = '';
+    if (qtyEl) qtyEl.value = 1;
+  });
+}
+
+if (clearDoneBtn) {
+  clearDoneBtn.addEventListener('click', clearCompleted);
+}
+if (inviteBtn) {
+  inviteBtn.addEventListener('click', () => inviteModal.classList.remove('hidden'));
+}
+if (closeInviteBtn) closeInviteBtn.addEventListener('click', () => inviteModal.classList.add('hidden'));
+if (copyInviteBtn) copyInviteBtn.addEventListener('click', async () => {
+  const text = inviteCodeEl.textContent || '';
+  await navigator.clipboard.writeText(text);
+  alert('Invite code copied');
+});
+if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+  await signOut(auth);
+  localStorage.removeItem('listId');
+  window.location.href = '/login.html';
 });
 
-// keyboard enter to add
-itemInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') addItem();
+/* ---------- Auth state ---------- */
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    window.location.href = '/login.html';
+    return;
+  }
+  currentUid = user.uid;
+  // register fcm token and store in users collection
+  await registerFCMToken(currentUid);
+  // pair id decision: if localStorage has listId use it; otherwise default to uid
+  currentPairId = localStorage.getItem('listId') || uidToPairId(currentUid);
+  await ensurePairDocExists(currentPairId, currentUid);
+  localStorage.setItem('listId', currentPairId);
+  // start listening
+  watchPairDoc(currentPairId);
+  setupOnMessage();
+  // Ask permission for notifications
+  if ('Notification' in window && Notification.permission !== 'granted') {
+    await Notification.requestPermission();
+  }
 });
-
-init();
