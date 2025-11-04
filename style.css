@@ -1,0 +1,4 @@
+/* Minimal extra styles */
+body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+.hidden { display:none; }
+.shadow { box-shadow: 0 6px 18px rgba(2,6,23,0.08); }
