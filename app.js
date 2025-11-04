@@ -121,6 +121,18 @@ async function addItem() {
   itemInput.value = ''; qtyInput.value = 1;
   showNotification('Item added', `${item.name} added to list`);
 }
+// Fetch product metadata from your Vercel API route
+async function fetchProductPreview(url) {
+  try {
+    const response = await fetch(`/api/fetchMetadata?url=${encodeURIComponent(url)}`);
+    const data = await response.json();
+    console.log("Fetched metadata:", data);
+    return data;
+  } catch (error) {
+    console.error("Error fetching product preview:", error);
+    return null;
+  }
+}
 
 // delegate clicks
 document.body.addEventListener('click', async (e) => {
