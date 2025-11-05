@@ -1,26 +1,70 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login - Shukku</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shukku - Login / Signup</title>
+
+  <!-- Tailwind for dev; compile for production -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PWA manifest & icons -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+<body class="bg-gray-50 min-h-screen flex items-center justify-center font-sans">
+
   <div class="bg-white p-6 rounded shadow w-80">
-    <h2 class="text-xl font-semibold mb-3">Welcome to Shukku</h2>
-    <input id="email" type="email" placeholder="Email" class="w-full p-2 border rounded mb-2" />
-    <input id="password" type="password" placeholder="Password" class="w-full p-2 border rounded mb-2" />
-    <div class="flex space-x-2">
-      <button id="loginBtn" class="flex-1 bg-blue-600 text-white py-2 rounded">Login</button>
-      <button id="signupBtn" class="flex-1 border py-2 rounded">Sign Up</button>
+    <h2 class="text-xl font-semibold mb-4 text-center">Welcome to Shukku</h2>
+
+    <!-- Choice buttons -->
+    <div id="auth-choice" class="flex justify-between mb-4">
+      <button onclick="showLogin()" class="flex-1 bg-blue-600 text-white py-2 rounded mr-2">Log In</button>
+      <button onclick="showSignup()" class="flex-1 border py-2 rounded ml-2">Sign Up</button>
     </div>
-    <p class="mt-3 text-sm text-gray-500">Have an invite code? <a id="joinWithCode" class="text-blue-600 cursor-pointer">Join partner</a></p>
-    <p id="error" class="text-red-500 text-sm mt-2"></p>
+
+    <!-- Login Form -->
+    <form id="login-form" style="display:none;" class="space-y-2">
+      <input id="login-email" type="email" placeholder="Email" class="w-full p-2 border rounded" required>
+      <input id="login-password" type="password" placeholder="Password" class="w-full p-2 border rounded" required>
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded">Log In</button>
+      <p class="text-sm text-gray-500 mt-1 text-center">Don't have an account? <span class="text-blue-600 cursor-pointer" onclick="showSignup()">Sign Up</span></p>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signup-form" style="display:none;" class="space-y-2">
+      <input id="signup-name" type="text" placeholder="Full Name" class="w-full p-2 border rounded" required>
+      <input id="signup-email" type="email" placeholder="Email" class="w-full p-2 border rounded" required>
+      <input id="signup-password" type="password" placeholder="Password" class="w-full p-2 border rounded" required>
+      <input id="partner-code" type="text" placeholder="Partner Code (optional)" class="w-full p-2 border rounded">
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded">Sign Up</button>
+      <p class="text-sm text-gray-500 mt-1 text-center">Already have an account? <span class="text-blue-600 cursor-pointer" onclick="showLogin()">Log In</span></p>
+    </form>
+
+    <p id="error" class="text-red-500 text-sm mt-2 text-center"></p>
   </div>
+
+  <!-- Firebase & Auth scripts -->
   <script type="module" src="firebase-config.js"></script>
   <script type="module" src="auth.js"></script>
+
+  <script>
+    // Toggle functions
+    function showLogin() {
+      document.getElementById("login-form").style.display = "block";
+      document.getElementById("signup-form").style.display = "none";
+      document.getElementById("auth-choice").style.display = "flex";
+    }
+    function showSignup() {
+      document.getElementById("login-form").style.display = "none";
+      document.getElementById("signup-form").style.display = "block";
+      document.getElementById("auth-choice").style.display = "flex";
+    }
+
+    // Make toggle functions global
+    window.showLogin = showLogin;
+    window.showSignup = showSignup;
+  </script>
+
 </body>
 </html>
