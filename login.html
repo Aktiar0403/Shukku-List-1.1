@@ -8,8 +8,8 @@
   <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <!-- PWA manifest & icons -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icons/icon-192.png">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png">
   
   <style>
     .auth-form { transition: all 0.3s ease; }
@@ -29,7 +29,7 @@
     <!-- App Logo/Header -->
     <div class="text-center mb-8">
       <div class="flex items-center justify-center mb-4">
-        <img src="icons/icon-192.png" alt="Shukku Logo" class="w-12 h-12 rounded-lg shadow">
+        <img src="./icons/icon-192.png" alt="Shukku Logo" class="w-12 h-12 rounded-lg shadow">
         <h1 class="text-2xl font-bold text-gray-800 ml-3">Shukku List</h1>
       </div>
       <p class="text-gray-600 text-sm">Shared shopping lists for couples & pairs</p>
@@ -127,8 +127,8 @@
   </div>
 
   <!-- Firebase & Auth scripts -->
-  <script type="module" src="firebase-config.js"></script>
-  <script type="module" src="auth.js"></script>
+  <script type="module" src="./firebase-config.js"></script>
+  <script type="module" src="./auth.js"></script>
 
   <script>
     let currentForm = 'login';
@@ -190,28 +190,43 @@
       errorEl.classList.add('hidden');
     }
 
+    // Check if user is already logged in when page loads
+    async function checkExistingAuth() {
+      try {
+        // Import auth module dynamically
+        const { getCurrentUser } = await import('./auth.js');
+        const user = getCurrentUser();
+        if (user) {
+          console.log('User already logged in, redirecting to main app');
+          window.location.href = './index.html';
+        }
+      } catch (error) {
+        console.log('No existing auth session or not loaded yet');
+      }
+    }
+
     // Enhanced login form handler
     document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  hideFormError();
-  setLoading('login', true);
+      e.preventDefault();
+      hideFormError();
+      setLoading('login', true);
 
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
 
-  try {
-    const { signInUser } = await import('./auth.js');
-    await signInUser(email, password);
-    
-    // Force redirect to main app
-    console.log('Login successful, redirecting...');
-    window.location.href = './index.html';
-    
-  } catch (error) {
-    setLoading('login', false);
-    showFormError(error.message);
-  }
-});
+      try {
+        const { signInUser } = await import('./auth.js');
+        await signInUser(email, password);
+        
+        // Force redirect to main app
+        console.log('Login successful, redirecting...');
+        window.location.href = './index.html';
+        
+      } catch (error) {
+        setLoading('login', false);
+        showFormError(error.message);
+      }
+    });
 
     // Enhanced signup form handler
     document.getElementById('signup-form').addEventListener('submit', async (e) => {
@@ -244,17 +259,16 @@
         // Handle partner code if provided
         if (partnerCode) {
           try {
-            // Note: You'll need to implement the join logic based on your app structure
             console.log('Partner code provided:', partnerCode);
             // await joinWithInviteCode(partnerCode, partnerUid);
           } catch (joinError) {
             console.warn('Failed to join partner list:', joinError);
-            // Continue with app - user can still join later
           }
         }
 
-        setLoading('signup', false);
-        // Success - redirect will be handled by auth state listener
+        // Redirect after successful signup
+        console.log('Signup successful, redirecting...');
+        window.location.href = './index.html';
         
       } catch (error) {
         setLoading('signup', false);
@@ -290,28 +304,12 @@
     // Initialize with login form
     showLogin();
 
+    // Check for existing auth session after a short delay
+    setTimeout(checkExistingAuth, 1000);
+
     // Make functions global
     window.showLogin = showLogin;
     window.showSignup = showSignup;
-    // Check if user is already logged in when page loads
-import { getCurrentUser } from './auth.js';
-
-async function checkExistingAuth() {
-  try {
-    const user = getCurrentUser();
-    if (user) {
-      console.log('User already logged in, redirecting to main app');
-      window.location.href = './index.html';
-    }
-  } catch (error) {
-    console.log('No existing auth session');
-  }
-}
-
-// Check on page load
-checkExistingAuth();
   </script>
-  
-
 </body>
 </html>
