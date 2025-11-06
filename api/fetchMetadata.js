@@ -2,17 +2,34 @@ import metascraper from 'metascraper';
 import metascraperTitle from 'metascraper-title';
 import metascraperImage from 'metascraper-image';
 import metascraperDescription from 'metascraper-description';
+import metascraperPrice from 'metascraper-price';
+import metascraperLogo from 'metascraper-logo';
 import got from 'got';
 
 const scraper = metascraper([
   metascraperTitle(),
   metascraperImage(),
-  metascraperDescription()
+  metascraperDescription(),
+  metascraperPrice(),
+  metascraperLogo()
 ]);
 
 // Cache for metadata to avoid repeated requests
 const metadataCache = new Map();
 const CACHE_DURATION = 1000 * 60 * 30; // 30 minutes
+
+// Enhanced price extraction from text
+function extractPriceFromText(text) {
+  const priceRegex = /(\$|€|£|¥)?\s*(\d+[.,]\d{2})/g;
+  const matches = text.match(priceRegex);
+  if (matches && matches.length > 0) {
+    // Get the first price match and clean it
+    const priceStr = matches[0].replace(/[^\d.,]/g, '').replace(',', '.');
+    const price = parseFloat(priceStr);
+    return isNaN(price) ? null : price;
+  }
+  return null;
+}
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -72,12 +89,31 @@ export default async function handler(req, res) {
 
     const metadata = await scraper({ html, url: finalUrl });
     
+    // Enhanced price detection
+    let detectedPrice = metadata.price;
+    if (!detectedPrice) {
+      // Try to extract price from title or description
+      detectedPrice = extractPriceFromText(metadata.title || '') || 
+                     extractPriceFromText(metadata.description || '');
+    }
+
+    // Clean and format price if found
+    if (detectedPrice) {
+      if (typeof detectedPrice === 'string') {
+        detectedPrice = parseFloat(detectedPrice.replace(/[^\d.,]/g, '').replace(',', '.'));
+      }
+      detectedPrice = isNaN(detectedPrice) ? null : Math.round(detectedPrice * 100) / 100;
+    }
+
     // Validate and clean metadata
     const cleanMetadata = {
       title: metadata.title ? metadata.title.trim() : null,
       description: metadata.description ? metadata.description.trim() : null,
       image: metadata.image || null,
-      url: finalUrl
+      logo: metadata.logo || null,
+      price: detectedPrice,
+      url: finalUrl,
+      site: new URL(finalUrl).hostname.replace('www.', '')
     };
 
     // Remove empty values

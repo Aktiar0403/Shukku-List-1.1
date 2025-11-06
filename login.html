@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shukku - Login / Signup</title>
+  <title>Shukku - Family Shopping List</title>
 
   <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -21,6 +21,10 @@
       25% { transform: translateX(-5px); }
       75% { transform: translateX(5px); }
     }
+    .family-code { 
+      font-family: 'Courier New', monospace;
+      letter-spacing: 2px;
+    }
   </style>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center font-sans p-4">
@@ -32,13 +36,14 @@
         <img src="./icons/icon-192.png" alt="Shukku Logo" class="w-12 h-12 rounded-lg shadow">
         <h1 class="text-2xl font-bold text-gray-800 ml-3">Shukku List</h1>
       </div>
-      <p class="text-gray-600 text-sm">Shared shopping lists for couples & pairs</p>
+      <p class="text-gray-600 text-sm">Family Shopping Lists & Budget Tracking</p>
     </div>
 
     <!-- Choice buttons -->
     <div id="auth-choice" class="flex bg-gray-100 p-1 rounded-lg mb-6">
       <button onclick="showLogin()" id="login-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 bg-white shadow-sm text-blue-600">Log In</button>
-      <button onclick="showSignup()" id="signup-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 text-gray-600 hover:text-gray-800">Sign Up</button>
+      <button onclick="showCreateFamily()" id="create-family-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 text-gray-600">Create Family</button>
+      <button onclick="showJoinFamily()" id="join-family-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 text-gray-600">Join Family</button>
     </div>
 
     <!-- Login Form -->
@@ -57,46 +62,74 @@
         <span id="login-text">Log In</span>
         <span id="login-loading" class="hidden">Signing in...</span>
       </button>
-      
-      <p class="text-center text-sm text-gray-600 mt-4">
-        Don't have an account? 
-        <button type="button" class="text-blue-600 font-medium hover:text-blue-800 transition-colors" onclick="showSignup()">Sign Up</button>
-      </p>
     </form>
 
-    <!-- Signup Form -->
-    <form id="signup-form" style="display:none;" class="auth-form space-y-4">
-      <div>
-        <label for="signup-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-        <input id="signup-name" type="text" placeholder="Your full name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+    <!-- Create Family Form -->
+    <form id="create-family-form" style="display:none;" class="auth-form space-y-4">
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <h3 class="font-semibold text-blue-800 mb-2">Create Your Family</h3>
+        <p class="text-blue-700 text-sm">You'll be the family admin and can invite others</p>
       </div>
       
       <div>
-        <label for="signup-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-        <input id="signup-email" type="email" placeholder="your@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+        <label for="create-family-name" class="block text-sm font-medium text-gray-700 mb-1">Family Name</label>
+        <input id="create-family-name" type="text" placeholder="e.g., Smith Family" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+
+      <div>
+        <label for="create-user-name" class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+        <input id="create-user-name" type="text" placeholder="Your full name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
       </div>
       
       <div>
-        <label for="signup-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-        <input id="signup-password" type="password" placeholder="At least 6 characters" minlength="6" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+        <label for="create-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input id="create-email" type="email" placeholder="your@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <div>
+        <label for="create-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="create-password" type="password" placeholder="At least 6 characters" minlength="6" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
         <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
       </div>
       
+      <button type="submit" id="create-family-submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold btn-primary transition-colors">
+        <span id="create-family-text">Create Family</span>
+        <span id="create-family-loading" class="hidden">Creating Family...</span>
+      </button>
+    </form>
+
+    <!-- Join Family Form -->
+    <form id="join-family-form" style="display:none;" class="auth-form space-y-4">
+      <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+        <h3 class="font-semibold text-green-800 mb-2">Join Existing Family</h3>
+        <p class="text-green-700 text-sm">Get the family code from your family admin</p>
+      </div>
+
       <div>
-        <label for="partner-code" class="block text-sm font-medium text-gray-700 mb-1">Partner Code (Optional)</label>
-        <input id="partner-code" type="text" placeholder="6-digit code from your partner" pattern="[0-9]{6}" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-        <p class="text-xs text-gray-500 mt-1">If you're joining an existing list</p>
+        <label for="join-family-code" class="block text-sm font-medium text-gray-700 mb-1">Family Code</label>
+        <input id="join-family-code" type="text" placeholder="e.g., SMITH5294" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all family-code" required>
+        <p class="text-xs text-gray-500 mt-1">Uppercase letters and numbers (e.g., SMITH5294)</p>
+      </div>
+
+      <div>
+        <label for="join-user-name" class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+        <input id="join-user-name" type="text" placeholder="Your full name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all" required>
       </div>
       
-      <button type="submit" id="signup-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold btn-primary transition-colors">
-        <span id="signup-text">Create Account</span>
-        <span id="signup-loading" class="hidden">Creating account...</span>
-      </button>
+      <div>
+        <label for="join-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input id="join-email" type="email" placeholder="your@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all" required>
+      </div>
       
-      <p class="text-center text-sm text-gray-600 mt-4">
-        Already have an account? 
-        <button type="button" class="text-blue-600 font-medium hover:text-blue-800 transition-colors" onclick="showLogin()">Log In</button>
-      </p>
+      <div>
+        <label for="join-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="join-password" type="password" placeholder="At least 6 characters" minlength="6" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <button type="submit" id="join-family-submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold btn-primary transition-colors">
+        <span id="join-family-text">Join Family</span>
+        <span id="join-family-loading" class="hidden">Joining Family...</span>
+      </button>
     </form>
 
     <!-- Error Display -->
@@ -104,23 +137,23 @@
 
     <!-- App Features -->
     <div class="mt-8 pt-6 border-t border-gray-200">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Why Shukku List?</h3>
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Family Shopping Features</h3>
       <div class="grid grid-cols-2 gap-3 text-xs text-gray-600">
         <div class="flex items-center">
           <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
-          Real-time sync
+          Real-time family sync
         </div>
         <div class="flex items-center">
           <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
-          Smart URL preview
+          Price tracking
         </div>
         <div class="flex items-center">
           <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
-          Push notifications
+          Budget management
         </div>
         <div class="flex items-center">
           <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
-          Works offline
+          Categories
         </div>
       </div>
     </div>
@@ -133,30 +166,56 @@
   <script>
     let currentForm = 'login';
 
-    // Enhanced form toggle functions
+    // Form toggle functions
     function showLogin() {
       document.getElementById("login-form").style.display = "block";
-      document.getElementById("signup-form").style.display = "none";
+      document.getElementById("create-family-form").style.display = "none";
+      document.getElementById("join-family-form").style.display = "none";
+      
       document.getElementById("login-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
       document.getElementById("login-tab").classList.remove("text-gray-600");
-      document.getElementById("signup-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
-      document.getElementById("signup-tab").classList.add("text-gray-600");
+      document.getElementById("create-family-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("create-family-tab").classList.add("text-gray-600");
+      document.getElementById("join-family-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("join-family-tab").classList.add("text-gray-600");
+      
       document.getElementById("error").classList.add("hidden");
       currentForm = 'login';
     }
 
-    function showSignup() {
+    function showCreateFamily() {
       document.getElementById("login-form").style.display = "none";
-      document.getElementById("signup-form").style.display = "block";
-      document.getElementById("signup-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
-      document.getElementById("signup-tab").classList.remove("text-gray-600");
+      document.getElementById("create-family-form").style.display = "block";
+      document.getElementById("join-family-form").style.display = "none";
+      
+      document.getElementById("create-family-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("create-family-tab").classList.remove("text-gray-600");
       document.getElementById("login-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
       document.getElementById("login-tab").classList.add("text-gray-600");
+      document.getElementById("join-family-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("join-family-tab").classList.add("text-gray-600");
+      
       document.getElementById("error").classList.add("hidden");
-      currentForm = 'signup';
+      currentForm = 'create-family';
     }
 
-    // Enhanced form submission with loading states
+    function showJoinFamily() {
+      document.getElementById("login-form").style.display = "none";
+      document.getElementById("create-family-form").style.display = "none";
+      document.getElementById("join-family-form").style.display = "block";
+      
+      document.getElementById("join-family-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("join-family-tab").classList.remove("text-gray-600");
+      document.getElementById("login-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("login-tab").classList.add("text-gray-600");
+      document.getElementById("create-family-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("create-family-tab").classList.add("text-gray-600");
+      
+      document.getElementById("error").classList.add("hidden");
+      currentForm = 'join-family';
+    }
+
+    // Loading states
     function setLoading(formType, loading) {
       const submitBtn = document.getElementById(`${formType}-submit`);
       const textSpan = document.getElementById(`${formType}-text`);
@@ -179,7 +238,6 @@
       errorEl.classList.remove('hidden');
       errorEl.classList.add('error-shake');
       
-      // Remove shake animation after it completes
       setTimeout(() => {
         errorEl.classList.remove('error-shake');
       }, 500);
@@ -190,10 +248,9 @@
       errorEl.classList.add('hidden');
     }
 
-    // Check if user is already logged in when page loads
+    // Check if user is already logged in
     async function checkExistingAuth() {
       try {
-        // Import auth module dynamically
         const { getCurrentUser } = await import('./auth.js');
         const user = getCurrentUser();
         if (user) {
@@ -201,11 +258,11 @@
           window.location.href = './index.html';
         }
       } catch (error) {
-        console.log('No existing auth session or not loaded yet');
+        console.log('No existing auth session');
       }
     }
 
-    // Enhanced login form handler
+    // Login form handler
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       hideFormError();
@@ -217,69 +274,56 @@
       try {
         const { signInUser } = await import('./auth.js');
         await signInUser(email, password);
-        
-        // Force redirect to main app
-        console.log('Login successful, redirecting...');
         window.location.href = './index.html';
-        
       } catch (error) {
         setLoading('login', false);
         showFormError(error.message);
       }
     });
 
-    // Enhanced signup form handler
-  
-document.getElementById('signup-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  hideFormError();
-  setLoading('signup', true);
+    // Create family form handler
+    document.getElementById('create-family-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideFormError();
+      setLoading('create-family', true);
 
-  const email = document.getElementById('signup-email').value.trim();
-  const password = document.getElementById('signup-password').value;
-  const name = document.getElementById('signup-name').value.trim();
-  const partnerCode = document.getElementById('partner-code').value.trim();
+      const familyName = document.getElementById('create-family-name').value.trim();
+      const userName = document.getElementById('create-user-name').value.trim();
+      const email = document.getElementById('create-email').value.trim();
+      const password = document.getElementById('create-password').value;
 
-  try {
-    // Enhanced validation
-    if (!email || !password || !name) {
-      throw new Error('Please fill in all required fields');
-    }
-
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters long');
-    }
-
-    const { signUpUser } = await import('./auth.js');
-    
-    // Prepare data for signup
-    const signupData = { name };
-    
-    // If partner code provided, we need to find the list first
-    if (partnerCode) {
-      if (!/^\d{6}$/.test(partnerCode)) {
-        throw new Error('Partner code must be 6 digits');
+      try {
+        const { createFamily } = await import('./auth.js');
+        await createFamily(email, password, familyName, userName);
+        window.location.href = './index.html';
+      } catch (error) {
+        setLoading('create-family', false);
+        showFormError(error.message);
       }
-      
-      // We need to find which list has this invite code
-      // For now, we'll store the code and handle it after redirect
-      // The main app will handle the joining process
-      signupData.partnerCode = partnerCode;
-      console.log('Partner code provided, will join after setup:', partnerCode);
-    }
+    });
 
-    const user = await signUpUser(email, password, signupData);
-    
-    // Redirect after successful signup
-    console.log('Signup successful, redirecting...');
-    window.location.href = './index.html';
-    
-  } catch (error) {
-    setLoading('signup', false);
-    showFormError(error.message);
-  }
-});
-    // Input validation enhancements
+    // Join family form handler
+    document.getElementById('join-family-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideFormError();
+      setLoading('join-family', true);
+
+      const familyCode = document.getElementById('join-family-code').value.trim().toUpperCase();
+      const userName = document.getElementById('join-user-name').value.trim();
+      const email = document.getElementById('join-email').value.trim();
+      const password = document.getElementById('join-password').value;
+
+      try {
+        const { joinFamily } = await import('./auth.js');
+        await joinFamily(email, password, familyCode, userName);
+        window.location.href = './index.html';
+      } catch (error) {
+        setLoading('join-family', false);
+        showFormError(error.message);
+      }
+    });
+
+    // Input validation
     document.querySelectorAll('input').forEach(input => {
       input.addEventListener('input', () => {
         hideFormError();
@@ -302,17 +346,19 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
     });
 
     observer.observe(document.getElementById('login-form'), { attributes: true });
-    observer.observe(document.getElementById('signup-form'), { attributes: true });
+    observer.observe(document.getElementById('create-family-form'), { attributes: true });
+    observer.observe(document.getElementById('join-family-form'), { attributes: true });
 
     // Initialize with login form
     showLogin();
 
-    // Check for existing auth session after a short delay
+    // Check for existing auth session
     setTimeout(checkExistingAuth, 1000);
 
     // Make functions global
     window.showLogin = showLogin;
-    window.showSignup = showSignup;
+    window.showCreateFamily = showCreateFamily;
+    window.showJoinFamily = showJoinFamily;
   </script>
 </body>
 </html>

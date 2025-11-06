@@ -1,4 +1,4 @@
-// Browser-friendly modular Firebase imports (works without bundler)
+// Browser-friendly modular Firebase imports
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -28,9 +28,10 @@ try {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Optional analytics - only initialize if supported
+// Optional analytics
+let analytics = null;
 try {
-  const analytics = getAnalytics(app);
+  analytics = getAnalytics(app);
 } catch (e) {
   console.log("Analytics not supported in this environment");
 }

@@ -1,14 +1,9 @@
-// Full client-side app for Shukku List (pair-only shared shopping)
-// Enhanced with complete error handling and performance optimizations
-
-import { auth, db, default as app } from './firebase-config.js';
-
+// Complete Family Shopping List App with Price Tracking & Categories
+import { auth, db } from './firebase-config.js';
 import {
   onAuthStateChanged,
   signOut,
-  getIdToken,
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-
 import {
   doc,
   getDoc,
@@ -19,7 +14,6 @@ import {
   arrayRemove,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
 import {
   getMessaging,
   getToken,
@@ -27,37 +21,63 @@ import {
   isSupported
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-messaging.js";
 
+import { 
+  getUserFamily, 
+  updateFamilyBudget,
+  signOutUser 
+} from './auth.js';
+
 /* ===========================
-   CONFIG - put your VAPID public key here
+   CONFIG
    =========================== */
 const VAPID_KEY = "BCR2my_4hqB9XOqjBTKmPLyVbOAg1-juwelEHiFIIXNSuoBo7ZX_4A9ktcYuwxmlX2meAv97H1gavSiC_1x_Tpc";
 
 /* ===========================
-   DOM elements (match to your HTML)
+   DOM elements
    =========================== */
 const itemInput = document.getElementById('itemInput');
+const categorySelect = document.getElementById('categorySelect');
 const qtyInput = document.getElementById('qtyInput');
+const priceInput = document.getElementById('priceInput');
 const addBtn = document.getElementById('addBtn');
 const listContainer = document.getElementById('listContainer');
-const inviteBtn = document.getElementById('inviteBtn');
-const inviteModal = document.getElementById('inviteModal');
-const inviteCodeEl = document.getElementById('inviteCode');
-const copyInviteBtn = document.getElementById('copyInvite');
-const closeInviteBtn = document.getElementById('closeInvite');
+const familySettingsBtn = document.getElementById('familySettingsBtn');
+const familySettingsModal = document.getElementById('familySettingsModal');
+const monthlyBudgetInput = document.getElementById('monthlyBudget');
+const saveSettingsBtn = document.getElementById('saveSettings');
+const closeSettingsBtn = document.getElementById('closeSettings');
 const logoutBtn = document.getElementById('logoutBtn');
-const clearDoneBtn = document.getElementById('clearDone');
-const partnerBadge = document.getElementById('partnerBadge');
+const clearDoneBtn = document.getElementById('clearDoneBtn');
+const familyNameEl = document.getElementById('familyName');
+const memberCountEl = document.getElementById('memberCount');
+const familyCodeTextEl = document.getElementById('familyCodeText');
+const settingsFamilyCodeEl = document.getElementById('settingsFamilyCode');
+const settingsMemberCountEl = document.getElementById('settingsMemberCount');
+const categoryChipsEl = document.getElementById('categoryChips');
 const ogPreview = document.getElementById('ogPreview');
-const progressText = document.getElementById('progressText');
-const progressBar = document.getElementById('progressBar');
+
+// Spending elements
+const totalSpentEl = document.getElementById('totalSpent');
+const remainingBudgetEl = document.getElementById('remainingBudget');
+const budgetAmountEl = document.getElementById('budgetAmount');
+const budgetProgressEl = document.getElementById('budgetProgress');
+const budgetPercentEl = document.getElementById('budgetPercent');
+const spendingSummaryEl = document.getElementById('spendingSummary');
+
+// Stats elements
+const totalItemsEl = document.getElementById('totalItems');
+const completedItemsEl = document.getElementById('completedItems');
+const pricedItemsEl = document.getElementById('pricedItems');
+const avgPriceEl = document.getElementById('avgPrice');
 
 /* ===========================
    State
    =========================== */
 let currentUid = null;
-let pairId = null;
-let pairDocUnsubscribe = null;
-let isOnline = navigator.onLine;
+let currentFamilyCode = null;
+let currentFamilyData = null;
+let familyDocUnsubscribe = null;
+let currentFilter = 'all';
 
 /* ===========================
    Enhanced Utility Functions
@@ -65,11 +85,9 @@ let isOnline = navigator.onLine;
 
 // Show user-friendly error messages
 function showError(message, duration = 5000) {
-  // Remove existing error toast if any
   const existingToast = document.getElementById('error-toast');
   if (existingToast) existingToast.remove();
 
-  // Create new toast
   const toast = document.createElement('div');
   toast.id = 'error-toast';
   toast.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-md';
@@ -77,12 +95,7 @@ function showError(message, duration = 5000) {
   
   document.body.appendChild(toast);
   
-  // Auto remove after duration
-  setTimeout(() => {
-    if (toast.parentNode) {
-      toast.parentNode.removeChild(toast);
-    }
-  }, duration);
+  setTimeout(() => toast.remove(), duration);
 }
 
 // Show success messages
@@ -93,24 +106,14 @@ function showSuccess(message, duration = 3000) {
   
   document.body.appendChild(toast);
   
-  setTimeout(() => {
-    if (toast.parentNode) {
-      toast.parentNode.removeChild(toast);
-    }
-  }, duration);
+  setTimeout(() => toast.remove(), duration);
 }
 
 // Show loading state
 function showLoading(show = true) {
-  if (show) {
-    const loader = document.createElement('div');
-    loader.id = 'global-loader';
-    loader.className = 'fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50';
-    loader.innerHTML = '<div class="bg-white p-4 rounded-lg shadow-lg">Loading...</div>';
-    document.body.appendChild(loader);
-  } else {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.remove();
+  const loader = document.getElementById('globalLoader');
+  if (loader) {
+    loader.classList.toggle('hidden', !show);
   }
 }
 
@@ -142,12 +145,82 @@ function isValidUrl(string) {
   }
 }
 
+// Format currency
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(amount || 0);
+}
+
+/* ===========================
+   Price & Spending Calculations
+   =========================== */
+
+// Calculate total spending
+function calculateTotalSpending(items) {
+  return items
+    .filter(item => item.done && item.price)
+    .reduce((total, item) => total + (item.price * (item.qty || 1)), 0);
+}
+
+// Calculate budget usage
+function calculateBudgetUsage(totalSpent, budget) {
+  if (!budget || budget <= 0) return { percent: 0, remaining: 0 };
+  
+  const percent = (totalSpent / budget) * 100;
+  const remaining = Math.max(0, budget - totalSpent);
+  
+  return { percent, remaining };
+}
+
+// Update spending summary UI
+function updateSpendingSummary(items, familyData) {
+  const totalSpent = calculateTotalSpending(items);
+  const budget = familyData?.monthlyBudget || 0;
+  const { percent, remaining } = calculateBudgetUsage(totalSpent, budget);
+  
+  // Update elements
+  if (totalSpentEl) totalSpentEl.textContent = formatCurrency(totalSpent);
+  if (remainingBudgetEl) remainingBudgetEl.textContent = formatCurrency(remaining);
+  if (budgetAmountEl) budgetAmountEl.textContent = formatCurrency(budget);
+  if (budgetProgressEl) budgetProgressEl.style.width = `${Math.min(percent, 100)}%`;
+  if (budgetPercentEl) budgetPercentEl.textContent = `${Math.round(percent)}%`;
+  
+  // Update spending summary appearance based on budget usage
+  if (spendingSummaryEl) {
+    spendingSummaryEl.classList.remove('budget-warning', 'budget-danger');
+    if (percent > 80 && percent <= 100) {
+      spendingSummaryEl.classList.add('budget-warning');
+    } else if (percent > 100) {
+      spendingSummaryEl.classList.add('budget-danger');
+    }
+  }
+}
+
+// Update quick stats
+function updateQuickStats(items) {
+  const totalItems = items.length;
+  const completedItems = items.filter(item => item.done).length;
+  const pricedItems = items.filter(item => item.price).length;
+  
+  // Calculate average price of priced items
+  const pricedItemsWithPrice = items.filter(item => item.price);
+  const avgPrice = pricedItemsWithPrice.length > 0 
+    ? pricedItemsWithPrice.reduce((sum, item) => sum + item.price, 0) / pricedItemsWithPrice.length 
+    : 0;
+  
+  if (totalItemsEl) totalItemsEl.textContent = totalItems;
+  if (completedItemsEl) completedItemsEl.textContent = completedItems;
+  if (pricedItemsEl) pricedItemsEl.textContent = pricedItems;
+  if (avgPriceEl) avgPriceEl.textContent = formatCurrency(avgPrice);
+}
+
 /* ===========================
    FCM: Enhanced token registration
    =========================== */
 async function registerFCMToken(uid) {
   return safeAsyncOperation(async () => {
-    // Check if messaging is supported
     const isMessagingSupported = await isSupported();
     if (!isMessagingSupported) {
       console.log('FCM not supported in this environment');
@@ -156,7 +229,6 @@ async function registerFCMToken(uid) {
 
     const messaging = getMessaging(app);
     
-    // Request notification permission if not granted
     if (Notification.permission === 'default') {
       await Notification.requestPermission();
     }
@@ -214,22 +286,17 @@ async function fetchProductPreview(url) {
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    const data = await res.json();
-    return data;
+    return await res.json();
   }, 'Failed to fetch product preview');
 }
 
-async function sendNotification(pairIdParam, payload) {
+async function sendNotification(familyCode, payload) {
   return safeAsyncOperation(async () => {
-    const idToken = await getUserIdToken();
     const res = await fetch('/api/sendNotification', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': idToken ? `Bearer ${idToken}` : ''
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        pairId: pairIdParam, 
+        familyCode, 
         payload: {
           title: payload.title || 'Shukku List',
           body: payload.body || '',
@@ -248,111 +315,84 @@ async function sendNotification(pairIdParam, payload) {
 }
 
 /* ===========================
-   Enhanced Pair Management
+   Family Management
    =========================== */
-async function ensurePairDoc(uid) {
-  return safeAsyncOperation(async () => {
-    if (!uid) {
-      throw new Error('User ID is required');
-    }
-
-    // Try to get existing list ID from localStorage
-    const existingListId = localStorage.getItem('listId');
-    
-    if (existingListId && existingListId !== 'null' && existingListId !== 'undefined') {
-      try {
-        // Verify the list still exists
-        const pairRef = doc(db, 'pairs', existingListId);
-        const snap = await getDoc(pairRef);
-        
-        if (snap.exists()) {
-          pairId = existingListId;
-          console.log('Using existing list:', pairId);
-          return pairId;
-        } else {
-          console.log('List no longer exists, creating new one');
-          localStorage.removeItem('listId');
-        }
-      } catch (error) {
-        console.log('Error accessing existing list, creating new one:', error);
-        localStorage.removeItem('listId');
-      }
-    }
-
-    // Create new pair document using user's UID
-    pairId = uid;
-    localStorage.setItem('listId', pairId);
-
-    const pairRef = doc(db, 'pairs', pairId);
-    const snap = await getDoc(pairRef);
-    
-    if (!snap.exists()) {
-      console.log('Creating new shopping list for user:', uid);
-      await setDoc(pairRef, {
-        users: [uid],
-        items: [],
-        inviteCode: Math.floor(100000 + Math.random() * 900000).toString(),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      console.log('New list created with ID:', pairId);
-    } else {
-      console.log('List already exists, ensuring user is member');
-      const data = snap.data();
-      if (!data.users || !data.users.includes(uid)) {
-        await updateDoc(pairRef, { 
-          users: arrayUnion(uid),
-          updatedAt: Date.now()
-        });
-      }
-    }
-    
-    return pairId;
-  }, 'Failed to setup your shopping list');
-}
-function unsubscribePairListener() {
-  if (typeof pairDocUnsubscribe === 'function') {
-    pairDocUnsubscribe();
+function unsubscribeFamilyListener() {
+  if (typeof familyDocUnsubscribe === 'function') {
+    familyDocUnsubscribe();
   }
-  pairDocUnsubscribe = null;
+  familyDocUnsubscribe = null;
 }
 
-function startPairListener(pairIdToListen) {
-  unsubscribePairListener();
+function startFamilyListener(familyCode) {
+  unsubscribeFamilyListener();
   
-  const pairRef = doc(db, 'pairs', pairIdToListen);
+  const familyRef = doc(db, 'families', familyCode);
   
-  pairDocUnsubscribe = onSnapshot(pairRef, 
+  familyDocUnsubscribe = onSnapshot(familyRef, 
     (snap) => {
       if (!snap.exists()) {
-        console.warn('Pair document not found');
-        showError('Shopping list not found. Creating new one...');
-        ensurePairDoc(currentUid);
+        console.warn('Family document not found');
+        showError('Family data not found');
         return;
       }
       
       const data = snap.data();
+      currentFamilyData = data;
       const items = data.items || [];
+      const categories = data.categories || ['Groceries', 'Household', 'Personal Care', 'Electronics', 'Other'];
       
       // Update UI
+      updateFamilyUI(data);
       renderList(items);
       updateProgress(items);
-      updateInviteCode(data.inviteCode);
-      updatePartnerStatus(data.users);
+      updateSpendingSummary(items, data);
+      updateQuickStats(items);
+      renderCategoryChips(categories);
       
     },
     (error) => {
       console.error('Firestore listener error:', error);
       showError('Connection issue. Reconnecting...');
       
-      // Attempt to reconnect after delay
       setTimeout(() => {
-        if (pairId) {
-          startPairListener(pairId);
+        if (currentFamilyCode) {
+          startFamilyListener(currentFamilyCode);
         }
       }, 5000);
     }
   );
+}
+
+function updateFamilyUI(familyData) {
+  // Update family name
+  if (familyNameEl) {
+    familyNameEl.textContent = familyData.familyName || 'Shukku List';
+  }
+  
+  // Update member count
+  const memberCount = familyData.members?.length || 1;
+  if (memberCountEl) {
+    memberCountEl.classList.toggle('hidden', memberCount <= 1);
+    document.getElementById('memberCountText').textContent = memberCount;
+  }
+  
+  // Update family code
+  if (familyCodeTextEl) {
+    familyCodeTextEl.textContent = familyData.familyCode;
+    familyCodeTextEl.parentElement.classList.remove('hidden');
+  }
+  
+  // Update settings modal
+  if (settingsFamilyCodeEl) {
+    settingsFamilyCodeEl.textContent = familyData.familyCode;
+  }
+  if (settingsMemberCountEl) {
+    settingsMemberCountEl.textContent = `${memberCount} member${memberCount !== 1 ? 's' : ''}`;
+  }
+  if (monthlyBudgetInput) {
+    monthlyBudgetInput.value = familyData.monthlyBudget || '';
+  }
 }
 
 /* ===========================
@@ -361,56 +401,84 @@ function startPairListener(pairIdToListen) {
 function renderList(items) {
   if (!listContainer) return;
   
+  // Apply filter
+  let filteredItems = items;
+  if (currentFilter !== 'all') {
+    filteredItems = items.filter(item => item.category === currentFilter);
+  }
+  
   listContainer.innerHTML = '';
   
-  if (items.length === 0) {
+  if (filteredItems.length === 0) {
+    const message = currentFilter === 'all' 
+      ? 'Your family list is empty. Add items above to get started!'
+      : `No items in ${currentFilter} category.`;
+    
     listContainer.innerHTML = `
       <li class="p-8 text-center text-gray-500 bg-white rounded shadow">
-        Your shopping list is empty<br>
-        <span class="text-sm">Add items above to get started</span>
+        <div class="text-gray-400 mb-3">🛒</div>
+        <h3 class="text-lg font-medium text-gray-600 mb-2">${message}</h3>
       </li>
     `;
     return;
   }
   
-  items.forEach((item, idx) => {
+  filteredItems.forEach((item, idx) => {
+    const originalIndex = items.findIndex(i => i.id === item.id);
     const li = document.createElement('li');
-    li.className = `p-3 bg-white rounded shadow flex justify-between items-center transition-all duration-200 ${
+    li.className = `p-4 bg-white rounded-lg shadow flex justify-between items-start transition-all duration-200 ${
       item.done ? 'opacity-60' : ''
     }`;
     
-    let leftHTML = `<div class="flex items-center flex-1 min-w-0">`;
+    const totalPrice = item.price && item.qty ? (item.price * item.qty).toFixed(2) : null;
+    
+    let leftHTML = `<div class="flex items-start flex-1 min-w-0">`;
     
     // Item image if available
     if (item.image) {
-      leftHTML += `<img src="${item.image}" alt="" class="w-12 h-12 rounded mr-3 object-cover flex-shrink-0" onerror="this.style.display='none'">`;
+      leftHTML += `<img src="${item.image}" alt="" class="w-16 h-16 rounded mr-3 object-cover flex-shrink-0" onerror="this.style.display='none'">`;
     }
     
     leftHTML += `<div class="min-w-0 flex-1">`;
     
-    // Item name with link if available
-    if (item.link) {
-      leftHTML += `<a href="${item.link}" target="_blank" rel="noopener" class="font-semibold text-blue-600 hover:text-blue-800 truncate block">${escapeHtml(item.name)}</a>`;
-    } else {
-      leftHTML += `<div class="font-semibold truncate">${escapeHtml(item.name)}</div>`;
+    // Category badge
+    if (item.category) {
+      leftHTML += `<span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full mb-2">${escapeHtml(item.category)}</span>`;
     }
     
-    // Item details
-    leftHTML += `<div class="text-xs text-gray-500 mt-1">`;
-    leftHTML += `Qty: ${escapeHtml(item.qty || 1)}`;
+    // Item name with link if available
+    if (item.link) {
+      leftHTML += `<a href="${item.link}" target="_blank" rel="noopener" class="font-semibold text-blue-600 hover:text-blue-800 truncate block mb-1">${escapeHtml(item.name)}</a>`;
+    } else {
+      leftHTML += `<div class="font-semibold truncate mb-1">${escapeHtml(item.name)}</div>`;
+    }
+    
+    // Item details with price information
+    leftHTML += `<div class="text-sm text-gray-600 space-y-1">`;
+    leftHTML += `<div>Qty: ${escapeHtml(item.qty || 1)}</div>`;
+    
+    if (item.price) {
+      leftHTML += `<div>`;
+      leftHTML += `Price: $${item.price.toFixed(2)} each`;
+      if (totalPrice) {
+        leftHTML += ` • <span class="font-semibold text-green-600">Total: $${totalPrice}</span>`;
+      }
+      leftHTML += `</div>`;
+    }
+    
     if (item.addedBy && item.addedBy !== currentUid) {
-      leftHTML += ` • Added by partner`;
+      leftHTML += `<div class="text-xs text-gray-500">Added by family member</div>`;
     }
     leftHTML += `</div>`;
     
     leftHTML += `</div></div>`;
 
     const rightHTML = `
-      <div class="flex items-center space-x-2 flex-shrink-0">
-        <button class="btn-toggle p-2 rounded-full hover:bg-gray-100 transition-colors" data-idx="${idx}" title="${item.done ? 'Mark as not bought' : 'Mark as bought'}">
+      <div class="flex items-center space-x-2 flex-shrink-0 ml-3">
+        <button class="btn-toggle p-2 rounded-full hover:bg-gray-100 transition-colors" data-idx="${originalIndex}" title="${item.done ? 'Mark as not bought' : 'Mark as bought'}">
           ${item.done ? '✅' : '🛒'}
         </button>
-        <button class="btn-delete p-2 rounded-full hover:bg-red-50 text-red-500 transition-colors" data-idx="${idx}" title="Remove item">
+        <button class="btn-delete p-2 rounded-full hover:bg-red-50 text-red-500 transition-colors" data-idx="${originalIndex}" title="Remove item">
           ✕
         </button>
       </div>
@@ -420,39 +488,68 @@ function renderList(items) {
     listContainer.appendChild(li);
   });
 
-  // Attach event listeners
+  // Update clear completed button state
+  const hasCompletedItems = items.some(item => item.done);
+  if (clearDoneBtn) {
+    clearDoneBtn.disabled = !hasCompletedItems;
+  }
+
   attachItemEventListeners();
+}
+
+function renderCategoryChips(categories) {
+  if (!categoryChipsEl) return;
+  
+  categoryChipsEl.innerHTML = '';
+  
+  // All categories chip
+  const allChip = document.createElement('button');
+  allChip.className = `category-chip px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+    currentFilter === 'all' 
+      ? 'bg-blue-600 text-white' 
+      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+  }`;
+  allChip.textContent = 'All Items';
+  allChip.onclick = () => setCategoryFilter('all');
+  categoryChipsEl.appendChild(allChip);
+  
+  // Category chips
+  categories.forEach(category => {
+    const chip = document.createElement('button');
+    chip.className = `category-chip px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+      currentFilter === category 
+        ? 'bg-blue-100 text-blue-800 border border-blue-300' 
+        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`;
+    chip.textContent = category;
+    chip.onclick = () => setCategoryFilter(category);
+    categoryChipsEl.appendChild(chip);
+  });
+}
+
+function setCategoryFilter(category) {
+  currentFilter = category;
+  if (currentFamilyData) {
+    renderList(currentFamilyData.items || []);
+  }
 }
 
 function updateProgress(items) {
   const total = items.length;
   const doneCount = items.filter(i => i.done).length;
   
+  const progressText = document.getElementById('progressText');
+  const progressPercent = document.getElementById('progressPercent');
+  const progressBar = document.getElementById('progressBar');
+  
   if (progressText) {
     progressText.textContent = `${doneCount} of ${total} items`;
   }
   
-  if (progressBar) {
+  if (progressBar && progressPercent) {
     const percentage = total ? Math.round((doneCount / total) * 100) : 0;
     progressBar.style.width = `${percentage}%`;
-    progressBar.setAttribute('aria-valuenow', percentage);
-  }
-}
-
-function updateInviteCode(code) {
-  if (inviteCodeEl) {
-    inviteCodeEl.textContent = code || '—';
-  }
-}
-
-function updatePartnerStatus(users) {
-  if (partnerBadge) {
-    const hasPartner = users && users.length > 1;
-    partnerBadge.textContent = hasPartner ? '👫 Connected' : '👤 Alone';
-    partnerBadge.className = `ml-3 text-sm px-2 py-0.5 rounded ${
-      hasPartner ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-    }`;
-    partnerBadge.classList.remove('hidden');
+    progressPercent.textContent = `${percentage}%`;
   }
 }
 
@@ -478,33 +575,29 @@ function attachItemEventListeners() {
   });
 }
 
-
 /* ===========================
    Enhanced CRUD Operations
    =========================== */
-async function addItem(rawText, qty = 1) {
+async function addItem(rawText, category, qty = 1, price = null) {
   return safeAsyncOperation(async () => {
-    if (!pairId || !currentUid) {
+    if (!currentFamilyCode || !currentUid) {
       throw new Error('App not ready. Please refresh the page.');
     }
 
-    // Input validation
     const trimmedText = (rawText || '').trim();
     if (!trimmedText) {
       throw new Error('Please enter an item name or URL');
     }
 
-    if (qty < 1 || qty > 999 || isNaN(qty)) {
-      throw new Error('Quantity must be a number between 1 and 999');
-    }
-
     let item = {
+      id: Date.now().toString(),
       name: trimmedText,
+      category: category || 'Other',
       qty: parseInt(qty),
+      price: price ? parseFloat(price) : null,
       addedBy: currentUid,
       done: false,
       createdAt: Date.now(),
-      id: Date.now().toString() // Simple ID for tracking
     };
 
     // URL detection and metadata fetching
@@ -529,24 +622,26 @@ async function addItem(rawText, qty = 1) {
     }
 
     // Save to Firestore
-    const pairRef = doc(db, 'pairs', pairId);
-    await updateDoc(pairRef, { 
+    const familyRef = doc(db, 'families', currentFamilyCode);
+    await updateDoc(familyRef, { 
       items: arrayUnion(item),
       updatedAt: Date.now()
     });
 
-    // Clear input
+    // Clear inputs
     if (itemInput) itemInput.value = '';
+    if (categorySelect) categorySelect.value = '';
     if (qtyInput) qtyInput.value = '1';
+    if (priceInput) priceInput.value = '';
     if (ogPreview) {
       ogPreview.innerHTML = '';
       ogPreview.classList.add('hidden');
     }
 
-    // Notify partner
-    await sendNotification(pairId, {
+    // Notify family members
+    await sendNotification(currentFamilyCode, {
       title: 'Item added',
-      body: `${item.name} added to list`,
+      body: `${item.name} added to ${item.category} list`,
       excludeUid: currentUid
     });
 
@@ -557,12 +652,12 @@ async function addItem(rawText, qty = 1) {
 
 async function toggleDone(index) {
   return safeAsyncOperation(async () => {
-    if (!pairId) throw new Error('No active list');
+    if (!currentFamilyCode) throw new Error('No active family');
 
-    const pairRef = doc(db, 'pairs', pairId);
-    const snap = await getDoc(pairRef);
+    const familyRef = doc(db, 'families', currentFamilyCode);
+    const snap = await getDoc(familyRef);
     
-    if (!snap.exists()) throw new Error('List not found');
+    if (!snap.exists()) throw new Error('Family not found');
     
     const items = Array.isArray(snap.data().items) ? [...snap.data().items] : [];
     if (!items[index]) throw new Error('Item not found');
@@ -570,13 +665,13 @@ async function toggleDone(index) {
     items[index].done = !items[index].done;
     items[index].updatedAt = Date.now();
     
-    await updateDoc(pairRef, { 
+    await updateDoc(familyRef, { 
       items,
       updatedAt: Date.now()
     });
 
     const action = items[index].done ? 'bought' : 'marked not bought';
-    await sendNotification(pairId, {
+    await sendNotification(currentFamilyCode, {
       title: items[index].done ? 'Item bought' : 'Item updated',
       body: `${items[index].name} ${action}`,
       excludeUid: currentUid
@@ -587,24 +682,24 @@ async function toggleDone(index) {
 
 async function deleteItem(index) {
   return safeAsyncOperation(async () => {
-    if (!pairId) throw new Error('No active list');
+    if (!currentFamilyCode) throw new Error('No active family');
 
-    const pairRef = doc(db, 'pairs', pairId);
-    const snap = await getDoc(pairRef);
+    const familyRef = doc(db, 'families', currentFamilyCode);
+    const snap = await getDoc(familyRef);
     
-    if (!snap.exists()) throw new Error('List not found');
+    if (!snap.exists()) throw new Error('Family not found');
     
     const items = Array.isArray(snap.data().items) ? [...snap.data().items] : [];
     if (!items[index]) throw new Error('Item not found');
     
     const removedItem = items.splice(index, 1)[0];
     
-    await updateDoc(pairRef, { 
+    await updateDoc(familyRef, { 
       items,
       updatedAt: Date.now()
     });
 
-    await sendNotification(pairId, {
+    await sendNotification(currentFamilyCode, {
       title: 'Item removed',
       body: `${removedItem.name} removed from list`,
       excludeUid: currentUid
@@ -617,10 +712,10 @@ async function deleteItem(index) {
 
 async function clearCompleted() {
   return safeAsyncOperation(async () => {
-    if (!pairId) throw new Error('No active list');
+    if (!currentFamilyCode) throw new Error('No active family');
 
-    const pairRef = doc(db, 'pairs', pairId);
-    const snap = await getDoc(pairRef);
+    const familyRef = doc(db, 'families', currentFamilyCode);
+    const snap = await getDoc(familyRef);
     
     const items = Array.isArray(snap.data().items) ? snap.data().items : [];
     const filtered = items.filter(i => !i.done);
@@ -630,7 +725,7 @@ async function clearCompleted() {
       return;
     }
     
-    await updateDoc(pairRef, { 
+    await updateDoc(familyRef, { 
       items: filtered,
       updatedAt: Date.now()
     });
@@ -638,6 +733,19 @@ async function clearCompleted() {
     showSuccess('Completed items cleared!');
     
   }, 'Failed to clear completed items');
+}
+
+async function updateBudget(newBudget) {
+  return safeAsyncOperation(async () => {
+    if (!currentFamilyCode) throw new Error('No active family');
+
+    await updateFamilyBudget(currentFamilyCode, newBudget);
+    showSuccess('Budget updated successfully!');
+    
+    // Close settings modal
+    familySettingsModal.classList.add('hidden');
+    
+  }, 'Failed to update budget');
 }
 
 /* ===========================
@@ -692,9 +800,12 @@ function initEventListeners() {
   if (addBtn) {
     addBtn.addEventListener('click', async () => {
       const raw = (itemInput?.value || '').trim();
+      const category = categorySelect?.value || 'Other';
       const qty = parseInt(qtyInput?.value || '1', 10) || 1;
+      const price = priceInput?.value || null;
+      
       if (raw) {
-        await addItem(raw, qty);
+        await addItem(raw, category, qty, price);
       }
     });
   }
@@ -704,9 +815,12 @@ function initEventListeners() {
     itemInput.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter') {
         const raw = (itemInput?.value || '').trim();
+        const category = categorySelect?.value || 'Other';
         const qty = parseInt(qtyInput?.value || '1', 10) || 1;
+        const price = priceInput?.value || null;
+        
         if (raw) {
-          await addItem(raw, qty);
+          await addItem(raw, category, qty, price);
         }
       }
     });
@@ -734,26 +848,40 @@ function initEventListeners() {
     });
   }
 
-  // Invite modal
-  if (inviteBtn) inviteBtn.addEventListener('click', () => {
-    inviteModal.classList.remove('hidden');
-  });
+  // Family settings
+  if (familySettingsBtn) {
+    familySettingsBtn.addEventListener('click', () => {
+      familySettingsModal.classList.remove('hidden');
+    });
+  }
   
-  if (closeInviteBtn) closeInviteBtn.addEventListener('click', () => {
-    inviteModal.classList.add('hidden');
-  });
+  if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => {
+      familySettingsModal.classList.add('hidden');
+    });
+  }
   
-  if (copyInviteBtn) copyInviteBtn.addEventListener('click', async () => {
-    const text = inviteCodeEl?.textContent || '';
-    if (text && text !== '—') {
-      try {
-        await navigator.clipboard.writeText(text);
-        showSuccess('Invite code copied!');
-      } catch (e) {
-        showError('Failed to copy invite code');
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', async () => {
+      const budget = monthlyBudgetInput?.value || '0';
+      await updateBudget(budget);
+    });
+  }
+
+  // Copy invite code
+  const copyInviteBtn = document.getElementById('copyInvite');
+  if (copyInviteBtn) {
+    copyInviteBtn.addEventListener('click', async () => {
+      if (currentFamilyData?.familyCode) {
+        try {
+          await navigator.clipboard.writeText(currentFamilyData.familyCode);
+          showSuccess('Family code copied!');
+        } catch (e) {
+          showError('Failed to copy family code');
+        }
       }
-    }
-  });
+    });
+  }
 
   // Logout
   if (logoutBtn) {
@@ -761,9 +889,8 @@ function initEventListeners() {
       if (confirm('Are you sure you want to logout?')) {
         showLoading(true);
         try {
-          await signOut(auth);
-          localStorage.removeItem('listId');
-          window.location.href = '/login.html';
+          await signOutUser();
+          window.location.href = './login.html';
         } catch (error) {
           showError('Logout failed');
           showLoading(false);
@@ -809,17 +936,17 @@ onAuthStateChanged(auth, async (user) => {
   
   // Handle user logout
   if (!user) {
-    console.log('👤 No user found, checking page location...');
+    console.log('👤 No user found, redirecting to login...');
     
     // Clean up listeners and state
-    unsubscribePairListener();
+    unsubscribeFamilyListener();
     currentUid = null;
-    pairId = null;
+    currentFamilyCode = null;
+    currentFamilyData = null;
     
-    // Redirect to login if not already there (but allow login page itself)
+    // Redirect to login if not already there
     if (!window.location.pathname.endsWith('login.html') && 
         window.location.pathname !== '/login.html') {
-      console.log('➡️ Redirecting to login page');
       window.location.href = './login.html';
     }
     return;
@@ -827,168 +954,59 @@ onAuthStateChanged(auth, async (user) => {
 
   // User is logged in
   currentUid = user.uid;
-  console.log('✅ User authenticated:', currentUid, '| Email:', user.email, '| Page:', window.location.pathname);
+  console.log('✅ User authenticated:', currentUid);
 
   // If we're on login page and user is authenticated, redirect to main app
   if (window.location.pathname.endsWith('login.html') || 
       window.location.pathname === '/login.html') {
-    console.log('➡️ Redirecting from login to main app');
     window.location.href = './index.html';
     return;
   }
 
-  // Only initialize app if we're on the main page or root
-  if (window.location.pathname.endsWith('index.html') || 
-      window.location.pathname === '/' || 
-      window.location.pathname.endsWith('/') ||
-      window.location.pathname === '' ||
-      window.location.pathname.includes('shukku-list')) {
+  // Initialize the app
+  console.log('🚀 Initializing Family Shopping List app...');
+  
+  try {
+    // Step 1: Get user's family data
+    console.log('🏠 Loading family data...');
+    const familyData = await getUserFamily(currentUid);
     
-    console.log('🚀 Initializing Shukku List app...');
-    
-    try {
-      // Step 1: Register for push notifications
-      console.log('📱 Registering FCM token...');
-      await registerFCMToken(currentUid);
-
-      // Step 2: Request notification permission
-      if ('Notification' in window && Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
-
-      // Step 3: Ensure user has a pair document (shopping list)
-      console.log('🛍️ Setting up shopping list...');
-      await ensurePairDoc(currentUid);
-
-      // Step 4: Check for pending invite codes (if user signed up with partner code)
-      console.log('🔍 Checking for pending invites...');
-      await checkPendingInvite();
-
-      // Step 5: Start real-time listener for the shopping list
-      console.log('📡 Starting real-time listener for pair:', pairId);
-      startPairListener(pairId);
-
-      // Step 6: Setup foreground message handling for notifications
-      console.log('🔔 Setting up message handlers...');
-      setupOnMessage();
-
-      // Step 7: Initialize UI event listeners
-      console.log('🎨 Initializing UI components...');
-      initEventListeners();
-
-      console.log('🎉 App initialized successfully!');
-      
-    } catch (error) {
-      console.error('❌ App initialization failed:', error);
-      showError('Failed to initialize app. Please refresh.');
-    }
-  } else {
-    console.log('⏸️ Skipping app initialization - not on main page:', window.location.pathname);
-  }
-});
-
-/* ===========================
-   Pending Invite Check System
-   =========================== */
-async function checkPendingInvite() {
-  return safeAsyncOperation(async () => {
-    if (!currentUid) {
-      console.log('⏸️ Skipping invite check - no user ID');
+    if (!familyData) {
+      showError('No family found. Please create or join a family.');
+      window.location.href = './login.html';
       return;
     }
 
-    console.log('🔍 Checking for pending invites for user:', currentUid);
-    
-    // Check if user has a pending invite code in their profile
-    const userRef = doc(db, 'users', currentUid);
-    const userSnap = await getDoc(userRef);
-    
-    if (userSnap.exists()) {
-      const userData = userSnap.data();
-      if (userData.pendingInviteCode) {
-        console.log('🎯 Found pending invite code:', userData.pendingInviteCode);
-        
-        try {
-          // Try to join the list with the invite code
-          await joinListByInviteCode(userData.pendingInviteCode);
-          
-          // Clear the pending invite code after successful join
-          await updateDoc(userRef, {
-            pendingInviteCode: null,
-            updatedAt: new Date().toISOString()
-          });
-          
-          console.log('✅ Successfully joined list and cleared pending invite');
-          showSuccess('Successfully joined your partner\'s shopping list!');
-          
-        } catch (joinError) {
-          console.warn('❌ Failed to join with pending invite:', joinError);
-          showError('Failed to join partner list. The invite code may be invalid or expired.');
-          
-          // Clear invalid pending invite code
-          await updateDoc(userRef, {
-            pendingInviteCode: null,
-            updatedAt: new Date().toISOString()
-          });
-        }
-      } else {
-        console.log('✅ No pending invites found');
-      }
-    } else {
-      console.log('⚠️ User document not found, skipping invite check');
-    }
-  }, 'Error checking pending invites');
-}
+    currentFamilyCode = familyData.familyCode;
+    currentFamilyData = familyData;
 
-/* ===========================
-   Invite Code Joining Function
-   =========================== */
-async function joinListByInviteCode(inviteCode) {
-  return safeAsyncOperation(async () => {
-    if (!inviteCode || !/^\d{6}$/.test(inviteCode)) {
-      throw new Error('Invalid invite code format');
-    }
+    // Step 2: Register for push notifications
+    console.log('📱 Registering FCM token...');
+    await registerFCMToken(currentUid);
 
-    console.log('🔎 Searching for list with invite code:', inviteCode);
+    // Step 3: Start real-time listener for the family
+    console.log('📡 Starting real-time listener for family:', currentFamilyCode);
+    startFamilyListener(currentFamilyCode);
+
+    // Step 4: Setup foreground message handling for notifications
+    console.log('🔔 Setting up message handlers...');
+    setupOnMessage();
+
+    // Step 5: Initialize UI event listeners
+    console.log('🎨 Initializing UI components...');
+    initEventListeners();
+
+    console.log('🎉 Family app initialized successfully!');
     
-    // We need to query pairs by inviteCode
-    // Note: This requires a Firestore index on inviteCode
-    const pairsRef = collection(db, 'pairs');
-    const q = query(pairsRef, where('inviteCode', '==', inviteCode));
-    const querySnapshot = await getDocs(q);
+  } catch (error) {
+    console.error('❌ App initialization failed:', error);
+    showError('Failed to initialize app. Please refresh.');
     
-    if (querySnapshot.empty) {
-      throw new Error('No list found with this invite code');
+    // Redirect to login if family data couldn't be loaded
+    if (error.message.includes('family') || error.message.includes('Family')) {
+      setTimeout(() => {
+        window.location.href = './login.html';
+      }, 3000);
     }
-    
-    // Get the first matching list (should be only one)
-    const pairDoc = querySnapshot.docs[0];
-    const pairData = pairDoc.data();
-    const listId = pairDoc.id;
-    
-    console.log('✅ Found list:', listId, 'with data:', pairData);
-    
-    // Verify the current user is not already in the list
-    if (pairData.users && pairData.users.includes(currentUid)) {
-      throw new Error('You are already a member of this list');
-    }
-    
-    // Add current user to the list
-    await updateDoc(doc(db, 'pairs', listId), {
-      users: arrayUnion(currentUid),
-      updatedAt: Date.now()
-    });
-    
-    // Update local state
-    pairId = listId;
-    localStorage.setItem('listId', listId);
-    
-    // Restart listener with the new list
-    startPairListener(pairId);
-    
-    showSuccess(`Successfully joined ${pairData.listName || 'the shopping list'}!`);
-    
-    return listId;
-    
-  }, 'Failed to join the list');
-}
+  }
+});

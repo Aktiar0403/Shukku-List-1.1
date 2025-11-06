@@ -20,20 +20,20 @@ try {
   messaging.onBackgroundMessage(function(payload) {
     console.log('[firebase-messaging-sw.js] Received background message:', payload);
     
-    const notificationTitle = payload.notification?.title || 'Shukku List';
+    const notificationTitle = payload.notification?.title || 'Shukku Family List';
     const notificationOptions = {
-      body: payload.notification?.body || 'Your shopping list was updated',
+      body: payload.notification?.body || 'Your family shopping list was updated',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       image: payload.notification?.image || null,
-      tag: 'shukku-background-notification',
+      tag: 'shukku-family-notification',
       renotify: true,
       requireInteraction: false,
-      data: payload.data || {}, // Pass any additional data
+      data: payload.data || {},
       actions: [
         {
           action: 'open',
-          title: '📝 Open List'
+          title: '📝 Open Family List'
         },
         {
           action: 'dismiss',
@@ -45,10 +45,10 @@ try {
     // Enhanced notification display with fallbacks
     self.registration.showNotification(notificationTitle, notificationOptions)
       .then(() => {
-        console.log('Background notification shown successfully');
+        console.log('Family notification shown successfully');
       })
       .catch(error => {
-        console.error('Failed to show background notification:', error);
+        console.error('Failed to show family notification:', error);
         
         // Fallback: Try without actions if they caused the error
         if (error.message.includes('actions')) {
@@ -67,7 +67,7 @@ try {
 
 // Enhanced notification click handler
 self.addEventListener('notificationclick', function(event) {
-  console.log('Notification clicked:', event.notification.tag);
+  console.log('Family notification clicked:', event.notification.tag);
   
   event.notification.close();
 
@@ -89,7 +89,7 @@ self.addEventListener('notificationclick', function(event) {
             // Focus existing window and navigate to main app
             client.focus();
             client.postMessage({
-              type: 'NOTIFICATION_CLICK',
+              type: 'FAMILY_NOTIFICATION_CLICK',
               data: notificationData
             });
             return;
@@ -104,14 +104,13 @@ self.addEventListener('notificationclick', function(event) {
     );
   } else if (action === 'dismiss') {
     // Notification was dismissed, no action needed
-    console.log('Notification dismissed by user');
+    console.log('Family notification dismissed by user');
   }
 });
 
 // Enhanced notification close handler
 self.addEventListener('notificationclose', function(event) {
-  console.log('Notification closed:', event.notification.tag);
-  // Analytics or cleanup could go here
+  console.log('Family notification closed:', event.notification.tag);
 });
 
 // Handle messages from the main app

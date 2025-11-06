@@ -4,70 +4,49 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#3b82f6" />
-  <title>Shukku List - Shared Shopping</title>
+  <title>Shukku List - Family Shopping</title>
   
   <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   
-  <!-- Preload critical resources -->
-  <link rel="preload" href="style.css" as="style">
-  <link rel="preload" href="firebase-config.js" as="script">
-  
   <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css">
+  <style>
+    .category-chip { transition: all 0.2s ease; }
+    .price-input::-webkit-outer-spin-button,
+    .price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .price-input[type=number] { -moz-appearance: textfield; }
+    .budget-warning { background: linear-gradient(45deg, #fef3c7, #fed7aa); }
+    .budget-danger { background: linear-gradient(45deg, #fecaca, #fca5a5); }
+  </style>
   
   <!-- PWA Service Worker Registration -->
   <script>
-    // Enhanced service worker registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          const registration = await navigator.serviceWorker.register('sw.js');
-          console.log('ServiceWorker registered successfully:', registration);
-          
-          // Check for updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            console.log('Service Worker update found!');
-            
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content is available, show update notification
-                showUpdateNotification();
-              }
-            });
-          });
+          await navigator.serviceWorker.register('sw.js');
+          console.log('ServiceWorker registered');
         } catch (error) {
           console.error('ServiceWorker registration failed:', error);
         }
       });
     }
 
-    // Update notification
-    function showUpdateNotification() {
-      if (confirm('A new version of Shukku List is available! Reload to update?')) {
-        window.location.reload();
-      }
-    }
-
     // Online/Offline detection
     window.addEventListener('online', () => {
-      document.documentElement.classList.remove('offline');
       showNetworkStatus('Back online!', 'success');
     });
 
     window.addEventListener('offline', () => {
-      document.documentElement.classList.add('offline');
       showNetworkStatus('You are offline', 'warning');
     });
 
     function showNetworkStatus(message, type) {
-      // Create temporary status message
       const statusEl = document.createElement('div');
       statusEl.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg z-50 ${
         type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-500 text-black'
@@ -75,34 +54,31 @@
       statusEl.textContent = message;
       document.body.appendChild(statusEl);
       
-      setTimeout(() => {
-        if (statusEl.parentNode) {
-          statusEl.parentNode.removeChild(statusEl);
-        }
-      }, 3000);
+      setTimeout(() => statusEl.remove(), 3000);
     }
   </script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans antialiased">
   <!-- App Header -->
   <header class="bg-blue-600 text-white p-4 shadow-lg sticky top-0 z-40">
-    <div class="max-w-xl mx-auto flex justify-between items-center">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
       <div class="flex items-center space-x-3">
         <img src="icons/icon-192.png" class="w-8 h-8 rounded shadow" alt="Shukku List Logo">
         <div>
-          <h1 class="text-lg font-semibold leading-tight">Shukku List</h1>
-          <div id="partnerBadge" class="text-xs opacity-90 hidden">
-            <span class="partner-status">👤 Shopping alone</span>
+          <h1 class="text-lg font-semibold leading-tight" id="familyName">Shukku List</h1>
+          <div id="familyInfo" class="text-xs opacity-90">
+            <span id="memberCount" class="hidden">👥 <span id="memberCountText">1</span> members</span>
+            <span id="familyCodeBadge" class="ml-2 hidden">🏷️ <span id="familyCodeText"></span></span>
           </div>
         </div>
       </div>
       
       <div class="flex items-center space-x-2">
         <!-- Online Status Indicator -->
-        <div id="onlineStatus" class="w-2 h-2 bg-green-400 rounded-full hidden" title="Online"></div>
+        <div id="onlineStatus" class="w-2 h-2 bg-green-400 rounded-full" title="Online"></div>
         
-        <button id="inviteBtn" class="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors shadow-sm" title="Invite partner">
-          👫 Invite
+        <button id="familySettingsBtn" class="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors shadow-sm" title="Family Settings">
+          ⚙️ Settings
         </button>
         <button id="logoutBtn" class="bg-white text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors shadow-sm" title="Logout">
           Logout
@@ -112,20 +88,80 @@
   </header>
 
   <!-- Main Content -->
-  <main class="p-4 max-w-xl mx-auto">
+  <main class="p-4 max-w-4xl mx-auto">
+    <!-- Spending Summary Section -->
+    <section class="mb-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl shadow-lg p-4 border border-green-200" id="spendingSummary">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        <div>
+          <div class="text-2xl font-bold text-green-600" id="totalSpent">$0.00</div>
+          <div class="text-sm text-gray-600">Total Spent</div>
+        </div>
+        <div>
+          <div class="text-2xl font-bold text-blue-600" id="remainingBudget">$0.00</div>
+          <div class="text-sm text-gray-600">Remaining</div>
+        </div>
+        <div>
+          <div class="text-2xl font-bold text-purple-600" id="budgetAmount">$0.00</div>
+          <div class="text-sm text-gray-600">Monthly Budget</div>
+        </div>
+        <div>
+          <div class="text-sm font-medium text-gray-700 mb-1">Budget Usage</div>
+          <div class="w-full bg-gray-200 rounded-full h-3">
+            <div id="budgetProgress" class="h-3 bg-gradient-to-r from-green-400 to-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="text-xs text-gray-600 mt-1" id="budgetPercent">0%</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Stats -->
+    <section class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white p-3 rounded-lg shadow text-center">
+        <div class="text-lg font-bold text-gray-800" id="totalItems">0</div>
+        <div class="text-xs text-gray-600">Total Items</div>
+      </div>
+      <div class="bg-white p-3 rounded-lg shadow text-center">
+        <div class="text-lg font-bold text-green-600" id="completedItems">0</div>
+        <div class="text-xs text-gray-600">Completed</div>
+      </div>
+      <div class="bg-white p-3 rounded-lg shadow text-center">
+        <div class="text-lg font-bold text-blue-600" id="pricedItems">0</div>
+        <div class="text-xs text-gray-600">With Prices</div>
+      </div>
+      <div class="bg-white p-3 rounded-lg shadow text-center">
+        <div class="text-lg font-bold text-purple-600" id="avgPrice">$0.00</div>
+        <div class="text-xs text-gray-600">Avg Price</div>
+      </div>
+    </section>
+
     <!-- Add Item Section -->
     <section class="mb-6 bg-white rounded-xl shadow-lg p-4">
-      <div class="flex flex-col sm:flex-row gap-2">
-        <div class="flex-1">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+        <!-- Item Name -->
+        <div class="md:col-span-4">
           <input 
             id="itemInput" 
             type="text"
             placeholder="Add item or paste product URL..." 
             class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            aria-label="Item name or URL"
           >
         </div>
-        <div class="flex gap-2">
+        
+        <!-- Category -->
+        <div class="md:col-span-2">
+          <select id="categorySelect" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+            <option value="">Select Category</option>
+            <option value="Groceries">🛒 Groceries</option>
+            <option value="Household">🏠 Household</option>
+            <option value="Personal Care">🧴 Personal Care</option>
+            <option value="Electronics">📱 Electronics</option>
+            <option value="Clothing">👕 Clothing</option>
+            <option value="Other">📦 Other</option>
+          </select>
+        </div>
+        
+        <!-- Quantity -->
+        <div class="md:col-span-2">
           <div class="relative">
             <input 
               id="qtyInput" 
@@ -133,50 +169,67 @@
               min="1" 
               max="999" 
               value="1"
-              class="w-20 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              aria-label="Quantity"
+              class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             >
             <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">Qty</span>
           </div>
+        </div>
+        
+        <!-- Price -->
+        <div class="md:col-span-2">
+          <div class="relative">
+            <input 
+              id="priceInput" 
+              type="number" 
+              min="0" 
+              step="0.01"
+              placeholder="0.00"
+              class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all price-input"
+            >
+            <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">$</span>
+          </div>
+        </div>
+        
+        <!-- Add Button -->
+        <div class="md:col-span-2">
           <button 
             id="addBtn" 
-            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-sm flex items-center justify-center min-w-[80px]"
-            aria-label="Add item to list"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-semibold transition-colors shadow-sm flex items-center justify-center"
           >
             <span id="addBtnText">Add</span>
-            <span id="addBtnLoading" class="hidden">
-              <svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            </span>
+            <span id="addBtnLoading" class="hidden">...</span>
           </button>
         </div>
       </div>
       
       <!-- URL Preview -->
-      <div id="ogPreview" class="mt-3 hidden bg-blue-50 border border-blue-200 rounded-lg p-3 transition-all duration-300">
-        <!-- Preview content will be injected here -->
-      </div>
+      <div id="ogPreview" class="mt-3 hidden bg-blue-50 border border-blue-200 rounded-lg p-3 transition-all duration-300"></div>
       
-      <!-- Input Hints -->
-      <div class="mt-2 text-xs text-gray-500 flex flex-wrap gap-4">
-        <span>💡 Paste product links for auto-preview</span>
-        <span>⚡ Press Enter to add quickly</span>
+      <!-- Category Chips -->
+      <div class="flex flex-wrap gap-2 mt-3" id="categoryChips">
+        <!-- Categories will be dynamically inserted -->
       </div>
     </section>
 
     <!-- Shopping List -->
     <section class="mb-6">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-800">Shopping List</h2>
-        <button 
-          id="clearDoneBtn" 
-          class="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          disabled
-        >
-          Clear Completed
-        </button>
+        <h2 class="text-lg font-semibold text-gray-800">Family Shopping List</h2>
+        <div class="flex space-x-2">
+          <button 
+            id="clearDoneBtn" 
+            class="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled
+          >
+            Clear Completed
+          </button>
+          <button 
+            id="filterBtn" 
+            class="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+          >
+            Filter
+          </button>
+        </div>
       </div>
 
       <!-- Progress Bar -->
@@ -191,9 +244,6 @@
             class="h-3 bg-blue-600 rounded-full transition-all duration-500 ease-out"
             style="width: 0%"
             role="progressbar"
-            aria-valuenow="0"
-            aria-valuemin="0"
-            aria-valuemax="100"
           ></div>
         </div>
       </div>
@@ -203,68 +253,76 @@
         <!-- Empty State -->
         <div class="text-center py-12 bg-white rounded-xl shadow">
           <div class="text-gray-400 mb-3">🛒</div>
-          <h3 class="text-lg font-medium text-gray-600 mb-2">Your list is empty</h3>
+          <h3 class="text-lg font-medium text-gray-600 mb-2">Your family list is empty</h3>
           <p class="text-gray-500 text-sm">Add items above to get started!</p>
         </div>
-        <!-- Items will be dynamically inserted here -->
-      </div>
-    </section>
-
-    <!-- Quick Actions -->
-    <section class="bg-white rounded-xl shadow-lg p-4">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
-      <div class="grid grid-cols-2 gap-3">
-        <button 
-          id="shareListBtn" 
-          class="p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors text-sm font-medium"
-          onclick="shareShoppingList()"
-        >
-          📤 Share List
-        </button>
-        <button 
-          id="printListBtn" 
-          class="p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors text-sm font-medium no-print"
-          onclick="printShoppingList()"
-        >
-          🖨️ Print List
-        </button>
       </div>
     </section>
   </main>
 
-  <!-- Invite Modal -->
-  <div id="inviteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden transition-opacity duration-300">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md transform transition-transform duration-300 scale-95">
+  <!-- Family Settings Modal -->
+  <div id="familySettingsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
       <div class="p-6">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold text-gray-800">Invite Your Partner</h3>
-          <button id="closeInvite" class="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
+          <h3 class="text-lg font-semibold text-gray-800">Family Settings</h3>
+          <button id="closeSettings" class="text-gray-400 hover:text-gray-600 transition-colors">✕</button>
         </div>
         
         <div class="space-y-4">
+          <!-- Family Info -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Your Invite Code</label>
-            <div class="flex items-center space-x-3">
-              <code id="inviteCode" class="flex-1 bg-gray-100 px-4 py-3 rounded-lg text-lg font-mono font-bold text-center text-gray-800">—</code>
-              <button id="copyInvite" class="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Family Information</label>
+            <div class="bg-gray-50 p-3 rounded-lg">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-sm text-gray-600">Family Code:</span>
+                <code id="settingsFamilyCode" class="font-mono font-bold text-blue-600"></code>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600">Members:</span>
+                <span id="settingsMemberCount" class="text-sm font-medium"></span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Budget Settings -->
+          <div>
+            <label for="monthlyBudget" class="block text-sm font-medium text-gray-700 mb-2">Monthly Budget</label>
+            <div class="relative">
+              <input 
+                id="monthlyBudget" 
+                type="number" 
+                min="0" 
+                step="10"
+                placeholder="0.00"
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all price-input"
+              >
+              <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">$</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Set 0 to disable budget tracking</p>
+          </div>
+          
+          <!-- Invite Section -->
+          <div class="border-t pt-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Invite Family Members</h4>
+            <div class="flex items-center space-x-2 mb-2">
+              <input 
+                id="inviteLink" 
+                type="text" 
+                readonly
+                class="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono"
+                value="Share the family code above"
+              >
+              <button id="copyInvite" class="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                 Copy
               </button>
             </div>
-            <p class="text-sm text-gray-500 mt-2">Share this code with your partner to connect lists</p>
+            <p class="text-xs text-gray-500">Share the family code with your family members</p>
           </div>
           
-          <div class="border-t pt-4">
-            <h4 class="text-sm font-medium text-gray-700 mb-2">How to connect:</h4>
-            <ol class="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Share this code with your partner</li>
-              <li>Partner signs up and enters the code</li>
-              <li>Your lists will sync automatically</li>
-            </ol>
-          </div>
+          <button id="saveSettings" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition-colors">
+            Save Settings
+          </button>
         </div>
       </div>
     </div>
@@ -282,122 +340,31 @@
   </div>
 
   <!-- App Scripts -->
-  <script type="module" src="firebase-config.js"></script>
-  <script type="module" src="auth.js"></script>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="./firebase-config.js"></script>
+  <script type="module" src="./auth.js"></script>
+  <script type="module" src="./app.js"></script>
 
-  <!-- Enhanced inline scripts for additional functionality -->
   <script>
     // Enhanced modal handling
     function setupModalHandlers() {
-      const modal = document.getElementById('inviteModal');
-      const closeBtn = document.getElementById('closeInvite');
+      const modal = document.getElementById('familySettingsModal');
+      const closeBtn = document.getElementById('closeSettings');
       
       if (modal && closeBtn) {
-        // Close modal on background click
         modal.addEventListener('click', (e) => {
-          if (e.target === modal) {
-            modal.classList.add('hidden');
-          }
+          if (e.target === modal) modal.classList.add('hidden');
         });
         
-        // Close on escape key
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
             modal.classList.add('hidden');
           }
         });
-        
-        // Enhance modal animation
-        setTimeout(() => {
-          modal.classList.remove('hidden');
-          setTimeout(() => {
-            const modalContent = modal.querySelector('div > div');
-            if (modalContent) {
-              modalContent.style.transform = 'scale(1)';
-            }
-          }, 50);
-        }, 100);
       }
     }
 
-    // Share shopping list function
-    async function shareShoppingList() {
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: 'My Shopping List',
-            text: 'Check out my shopping list on Shukku List!',
-            url: window.location.href,
-          });
-        } catch (error) {
-          console.log('Share cancelled:', error);
-        }
-      } else {
-        // Fallback: copy to clipboard
-        try {
-          await navigator.clipboard.writeText(window.location.href);
-          alert('Link copied to clipboard!');
-        } catch (error) {
-          alert('Share this link: ' + window.location.href);
-        }
-      }
-    }
-
-    // Print shopping list function
-    function printShoppingList() {
-      const listItems = document.getElementById('listContainer').innerHTML;
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Shukku List - Shopping List</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; }
-              .item { margin: 10px 0; padding: 10px; border-bottom: 1px solid #eee; }
-              .item.done { text-decoration: line-through; opacity: 0.6; }
-              .header { text-align: center; margin-bottom: 20px; }
-              .timestamp { text-align: right; font-size: 12px; color: #666; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>Shukku List</h1>
-              <p>Shopping List - ${new Date().toLocaleDateString()}</p>
-            </div>
-            <div class="list">
-              ${listItems}
-            </div>
-            <div class="timestamp">
-              Printed on ${new Date().toLocaleString()}
-            </div>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
-
-    // Enhanced offline detection
-    function updateOnlineStatus() {
-      const onlineStatus = document.getElementById('onlineStatus');
-      if (onlineStatus) {
-        if (navigator.onLine) {
-          onlineStatus.classList.remove('hidden');
-          onlineStatus.classList.add('bg-green-400');
-          onlineStatus.classList.remove('bg-red-400');
-        } else {
-          onlineStatus.classList.remove('hidden');
-          onlineStatus.classList.add('bg-red-400');
-          onlineStatus.classList.remove('bg-green-400');
-        }
-      }
-    }
-
-    // Initialize enhanced features when DOM is loaded
+    // Initialize enhanced features
     document.addEventListener('DOMContentLoaded', () => {
-      updateOnlineStatus();
       setupModalHandlers();
       
       // Add loading state to add button
@@ -406,7 +373,6 @@
       
       if (addBtn && itemInput) {
         itemInput.addEventListener('input', () => {
-          // Enable/disable add button based on input
           addBtn.disabled = !itemInput.value.trim();
         });
       }
@@ -415,16 +381,6 @@
     // Enhanced error boundary
     window.addEventListener('error', (e) => {
       console.error('Global error caught:', e.error);
-      // Could send to analytics service here
-    });
-
-    // Page visibility handling (pause updates when not visible)
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        console.log('Page hidden - pausing non-essential updates');
-      } else {
-        console.log('Page visible - resuming updates');
-      }
     });
   </script>
 </body>

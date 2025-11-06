@@ -1,11 +1,19 @@
 import { 
   getAuth, 
   createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+  signInWithEmailAndPassword,
+  signOut 
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { 
   doc, 
-  setDoc 
+  setDoc, 
+  getDoc,
+  updateDoc,
+  arrayUnion,
+  collection,
+  query,
+  where,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { auth, db } from './firebase-config.js';
 
@@ -20,99 +28,119 @@ const authErrorMessages = {
   'auth/too-many-requests': 'Too many attempts. Please try again later.'
 };
 
-// Utility to clean data (remove undefined values)
-const cleanData = (data) => {
-  const cleaned = {};
-  Object.keys(data).forEach(key => {
-    if (data[key] !== undefined && data[key] !== null) {
-      cleaned[key] = data[key];
-    }
-  });
-  return cleaned;
-};
+// Generate family reference code
+function generateFamilyCode(familyName) {
+  const cleanName = familyName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 4);
+  const randomDigits = Math.floor(1000 + Math.random() * 9000); // 1000-9999
+  return `${cleanName}${randomDigits}`;
+}
 
-// Sign up user with enhanced error handling
-// Enhanced signUpUser function with partner code joining
-export const signUpUser = async (email, password, extraData = {}) => {
+// Create new family (Family Creator)
+export const createFamily = async (email, password, familyName, userName) => {
   try {
-    // Input validation
-    if (!email || !password) {
-      throw new Error('Email and password are required');
-    }
-    
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
+    if (!familyName || familyName.length < 2) {
+      throw new Error('Family name must be at least 2 characters');
     }
 
+    // 1. Create user account
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+
+    // 2. Generate unique family code
+    const familyCode = generateFamilyCode(familyName);
     
-    // Prepare user data for Firestore
-    const userData = cleanData({
-      uid: user.uid,
-      email: user.email,
-      name: extraData.name || '',
+    // 3. Create family document
+    const familyData = {
+      familyName: familyName.trim(),
+      familyCode,
+      createdBy: user.uid,
+      members: [user.uid],
+      items: [],
+      categories: ['Groceries', 'Household', 'Personal Care', 'Electronics', 'Other'],
+      monthlyBudget: 0,
+      currency: 'USD',
       createdAt: new Date().toISOString(),
-      ...extraData
-    });
+      updatedAt: new Date().toISOString()
+    };
 
-    console.log("Creating user document in Firestore:", userData);
+    await setDoc(doc(db, "families", familyCode), familyData);
+
+    // 4. Create user document
+    const userData = {
+      email: user.email,
+      name: userName.trim(),
+      currentFamily: familyCode,
+      role: 'admin',
+      createdAt: new Date().toISOString()
+    };
+
     await setDoc(doc(db, "users", user.uid), userData);
-    console.log("User created and saved in Firestore successfully!");
 
-    // Handle partner code if provided
-    if (extraData.partnerCode && extraData.partnerListId) {
-      console.log("Joining partner list with code:", extraData.partnerCode);
-      await joinPartnerList(user.uid, extraData.partnerCode, extraData.partnerListId);
-    }
+    console.log("Family created successfully:", familyCode);
+    return { user, familyCode, familyName: familyName.trim() };
 
-    return user;
   } catch (error) {
-    console.error("Error during sign up:", error.code, error.message);
-    
-    // Provide user-friendly error messages
+    console.error("Error creating family:", error.code, error.message);
     const userMessage = authErrorMessages[error.code] || 
                        error.message || 
-                       'Sign up failed. Please try again.';
+                       'Family creation failed. Please try again.';
     throw new Error(userMessage);
   }
 };
 
-// New function to join partner list
-async function joinPartnerList(userId, partnerCode, listId) {
+// Join existing family (Family Member)
+export const joinFamily = async (email, password, familyCode, userName) => {
   try {
-    const pairRef = doc(db, 'pairs', listId);
-    const pairSnap = await getDoc(pairRef);
-    
-    if (!pairSnap.exists()) {
-      throw new Error('Partner list not found');
+    if (!familyCode || familyCode.length < 6) {
+      throw new Error('Please enter a valid family code');
     }
+
+    // 1. Verify family exists
+    const familyRef = doc(db, "families", familyCode);
+    const familySnap = await getDoc(familyRef);
     
-    const pairData = pairSnap.data();
-    
-    // Verify invite code
-    if (pairData.inviteCode !== partnerCode) {
-      throw new Error('Invalid invite code');
+    if (!familySnap.exists()) {
+      throw new Error('Family not found. Please check the code.');
     }
-    
-    // Add user to the pair
-    await updateDoc(pairRef, {
-      users: arrayUnion(userId),
+
+    const familyData = familySnap.data();
+
+    // 2. Create user account
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // 3. Add user to family members
+    await updateDoc(familyRef, {
+      members: arrayUnion(user.uid),
       updatedAt: new Date().toISOString()
     });
-    
-    console.log(`User ${userId} successfully joined list ${listId}`);
-    
-  } catch (error) {
-    console.error('Error joining partner list:', error);
-    throw new Error(`Failed to join partner list: ${error.message}`);
-  }
-}
 
-// Sign in user with enhanced error handling
+    // 4. Create user document
+    const userData = {
+      email: user.email,
+      name: userName.trim(),
+      currentFamily: familyCode,
+      role: 'member',
+      createdAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, "users", user.uid), userData);
+
+    console.log("User joined family successfully:", familyCode);
+    return { user, familyCode, familyName: familyData.familyName };
+
+  } catch (error) {
+    console.error("Error joining family:", error.code, error.message);
+    const userMessage = authErrorMessages[error.code] || 
+                       error.message || 
+                       'Failed to join family. Please try again.';
+    throw new Error(userMessage);
+  }
+};
+
+// Sign in user
 export const signInUser = async (email, password) => {
   try {
-    // Input validation
     if (!email || !password) {
       throw new Error('Email and password are required');
     }
@@ -123,8 +151,6 @@ export const signInUser = async (email, password) => {
     return user;
   } catch (error) {
     console.error("Error during sign in:", error.code, error.message);
-    
-    // Provide user-friendly error messages
     const userMessage = authErrorMessages[error.code] || 
                        error.message || 
                        'Sign in failed. Please try again.';
@@ -132,7 +158,67 @@ export const signInUser = async (email, password) => {
   }
 };
 
+// Get user's family data
+export const getUserFamily = async (userId) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      throw new Error('User data not found');
+    }
+
+    const userData = userSnap.data();
+    const familyCode = userData.currentFamily;
+
+    if (!familyCode) {
+      return null; // User has no family
+    }
+
+    const familyRef = doc(db, "families", familyCode);
+    const familySnap = await getDoc(familyRef);
+    
+    if (!familySnap.exists()) {
+      throw new Error('Family data not found');
+    }
+
+    return {
+      ...familySnap.data(),
+      familyCode,
+      userRole: userData.role
+    };
+
+  } catch (error) {
+    console.error("Error getting user family:", error);
+    throw error;
+  }
+};
+
+// Update family budget
+export const updateFamilyBudget = async (familyCode, budget) => {
+  try {
+    const familyRef = doc(db, "families", familyCode);
+    await updateDoc(familyRef, {
+      monthlyBudget: parseFloat(budget),
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error updating budget:", error);
+    throw error;
+  }
+};
+
 // Utility function to get current user
 export const getCurrentUser = () => {
   return auth.currentUser;
+};
+
+// Sign out
+export const signOutUser = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Error signing out:", error);
+    throw error;
+  }
 };

@@ -1,4 +1,4 @@
-const CACHE_NAME = "shukku-list-v2";
+const CACHE_NAME = "shukku-family-v2";
 const API_CACHE_NAME = "shukku-api-v1";
 const urlsToCache = [
   "/",
@@ -239,7 +239,7 @@ self.addEventListener('push', (event) => {
   }
 
   const options = {
-    body: data.body || 'Your shopping list was updated',
+    body: data.body || 'Your family shopping list was updated',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: 'shukku-notification',

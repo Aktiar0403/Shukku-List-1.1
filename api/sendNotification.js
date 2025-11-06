@@ -92,11 +92,11 @@ export default async function handler(req, res) {
     }
 
     payload = req.body;
-    const { pairId, payload: notifPayload } = payload;
+    const { familyCode, payload: notifPayload } = payload;
 
     // Validate required fields
-    if (!pairId || typeof pairId !== 'string') {
-      return res.status(400).json({ error: 'Missing or invalid pairId' });
+    if (!familyCode || typeof familyCode !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid familyCode' });
     }
 
     if (!notifPayload || typeof notifPayload !== 'object') {
@@ -111,17 +111,17 @@ export default async function handler(req, res) {
     const appAdmin = initAdmin();
     const firestore = appAdmin.firestore();
 
-    // Validate pair document exists
-    const pairSnap = await firestore.collection('pairs').doc(pairId).get();
-    if (!pairSnap.exists) {
-      return res.status(404).json({ error: 'Shopping list not found' });
+    // Validate family document exists
+    const familySnap = await firestore.collection('families').doc(familyCode).get();
+    if (!familySnap.exists) {
+      return res.status(404).json({ error: 'Family not found' });
     }
 
-    const pairData = pairSnap.data();
-    const users = Array.isArray(pairData.users) ? pairData.users : [];
+    const familyData = familySnap.data();
+    const users = Array.isArray(familyData.members) ? familyData.members : [];
 
     if (users.length === 0) {
-      return res.status(400).json({ error: 'No users in this shopping list' });
+      return res.status(400).json({ error: 'No users in this family' });
     }
 
     // Gather FCM tokens from users
@@ -175,7 +175,7 @@ export default async function handler(req, res) {
     const message = {
       notification: {
         title: notifPayload.title.trim(),
-        body: (notifPayload.body || '').trim() || 'Your shopping list was updated',
+        body: (notifPayload.body || '').trim() || 'Your family shopping list was updated',
         image: notifPayload.image || undefined
       },
       apns: {
@@ -201,7 +201,7 @@ export default async function handler(req, res) {
       tokens: validTokens
     };
 
-    console.log(`Sending notification to ${validTokens.length} tokens for pair ${pairId}`);
+    console.log(`Sending notification to ${validTokens.length} tokens for family ${familyCode}`);
 
     // Send multicast notification
     const response = await appAdmin.messaging().sendEachForMulticast(message);
