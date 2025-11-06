@@ -833,7 +833,7 @@ onAuthStateChanged(auth, async (user) => {
       showError('Failed to initialize app. Please refresh.');
     }
   }
-});
+
 
   try {
     // Register for push notifications
