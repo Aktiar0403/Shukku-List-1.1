@@ -32,6 +32,7 @@ const cleanData = (data) => {
 };
 
 // Sign up user with enhanced error handling
+// Enhanced signUpUser function with partner code joining
 export const signUpUser = async (email, password, extraData = {}) => {
   try {
     // Input validation
@@ -59,6 +60,12 @@ export const signUpUser = async (email, password, extraData = {}) => {
     await setDoc(doc(db, "users", user.uid), userData);
     console.log("User created and saved in Firestore successfully!");
 
+    // Handle partner code if provided
+    if (extraData.partnerCode && extraData.partnerListId) {
+      console.log("Joining partner list with code:", extraData.partnerCode);
+      await joinPartnerList(user.uid, extraData.partnerCode, extraData.partnerListId);
+    }
+
     return user;
   } catch (error) {
     console.error("Error during sign up:", error.code, error.message);
@@ -70,6 +77,37 @@ export const signUpUser = async (email, password, extraData = {}) => {
     throw new Error(userMessage);
   }
 };
+
+// New function to join partner list
+async function joinPartnerList(userId, partnerCode, listId) {
+  try {
+    const pairRef = doc(db, 'pairs', listId);
+    const pairSnap = await getDoc(pairRef);
+    
+    if (!pairSnap.exists()) {
+      throw new Error('Partner list not found');
+    }
+    
+    const pairData = pairSnap.data();
+    
+    // Verify invite code
+    if (pairData.inviteCode !== partnerCode) {
+      throw new Error('Invalid invite code');
+    }
+    
+    // Add user to the pair
+    await updateDoc(pairRef, {
+      users: arrayUnion(userId),
+      updatedAt: new Date().toISOString()
+    });
+    
+    console.log(`User ${userId} successfully joined list ${listId}`);
+    
+  } catch (error) {
+    console.error('Error joining partner list:', error);
+    throw new Error(`Failed to join partner list: ${error.message}`);
+  }
+}
 
 // Sign in user with enhanced error handling
 export const signInUser = async (email, password) => {

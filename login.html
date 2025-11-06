@@ -229,53 +229,56 @@
     });
 
     // Enhanced signup form handler
-    document.getElementById('signup-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      hideFormError();
-      setLoading('signup', true);
+  
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideFormError();
+  setLoading('signup', true);
 
-      const email = document.getElementById('signup-email').value.trim();
-      const password = document.getElementById('signup-password').value;
-      const name = document.getElementById('signup-name').value.trim();
-      const partnerCode = document.getElementById('partner-code').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const name = document.getElementById('signup-name').value.trim();
+  const partnerCode = document.getElementById('partner-code').value.trim();
 
-      try {
-        // Enhanced validation
-        if (!email || !password || !name) {
-          throw new Error('Please fill in all required fields');
-        }
+  try {
+    // Enhanced validation
+    if (!email || !password || !name) {
+      throw new Error('Please fill in all required fields');
+    }
 
-        if (password.length < 6) {
-          throw new Error('Password must be at least 6 characters long');
-        }
+    if (password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
 
-        if (partnerCode && !/^\d{6}$/.test(partnerCode)) {
-          throw new Error('Partner code must be 6 digits');
-        }
-
-        const { signUpUser } = await import('./auth.js');
-        const user = await signUpUser(email, password, { name });
-        
-        // Handle partner code if provided
-        if (partnerCode) {
-          try {
-            console.log('Partner code provided:', partnerCode);
-            // await joinWithInviteCode(partnerCode, partnerUid);
-          } catch (joinError) {
-            console.warn('Failed to join partner list:', joinError);
-          }
-        }
-
-        // Redirect after successful signup
-        console.log('Signup successful, redirecting...');
-        window.location.href = './index.html';
-        
-      } catch (error) {
-        setLoading('signup', false);
-        showFormError(error.message);
+    const { signUpUser } = await import('./auth.js');
+    
+    // Prepare data for signup
+    const signupData = { name };
+    
+    // If partner code provided, we need to find the list first
+    if (partnerCode) {
+      if (!/^\d{6}$/.test(partnerCode)) {
+        throw new Error('Partner code must be 6 digits');
       }
-    });
+      
+      // We need to find which list has this invite code
+      // For now, we'll store the code and handle it after redirect
+      // The main app will handle the joining process
+      signupData.partnerCode = partnerCode;
+      console.log('Partner code provided, will join after setup:', partnerCode);
+    }
 
+    const user = await signUpUser(email, password, signupData);
+    
+    // Redirect after successful signup
+    console.log('Signup successful, redirecting...');
+    window.location.href = './index.html';
+    
+  } catch (error) {
+    setLoading('signup', false);
+    showFormError(error.message);
+  }
+});
     // Input validation enhancements
     document.querySelectorAll('input').forEach(input => {
       input.addEventListener('input', () => {

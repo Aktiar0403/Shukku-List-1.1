@@ -478,6 +478,7 @@ function attachItemEventListeners() {
   });
 }
 
+
 /* ===========================
    Enhanced CRUD Operations
    =========================== */
@@ -804,156 +805,190 @@ function setupOnMessage() {
    Enhanced Auth State Management
    =========================== */
 onAuthStateChanged(auth, async (user) => {
-  console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+  console.log('🔐 Auth state changed:', user ? `User logged in (${user.uid})` : 'No user');
   
+  // Handle user logout
   if (!user) {
-    // Not logged in - redirect to login (but allow login page itself)
-    if (!window.location.pathname.endsWith('login.html')) {
-      console.log('No user, redirecting to login');
+    console.log('👤 No user found, checking page location...');
+    
+    // Clean up listeners and state
+    unsubscribePairListener();
+    currentUid = null;
+    pairId = null;
+    
+    // Redirect to login if not already there (but allow login page itself)
+    if (!window.location.pathname.endsWith('login.html') && 
+        window.location.pathname !== '/login.html') {
+      console.log('➡️ Redirecting to login page');
       window.location.href = './login.html';
     }
     return;
   }
 
+  // User is logged in
   currentUid = user.uid;
-  console.log('User authenticated:', currentUid, 'on page:', window.location.pathname);
+  console.log('✅ User authenticated:', currentUid, '| Email:', user.email, '| Page:', window.location.pathname);
 
   // If we're on login page and user is authenticated, redirect to main app
-  if (window.location.pathname.endsWith('login.html')) {
-    console.log('Redirecting from login to main app');
+  if (window.location.pathname.endsWith('login.html') || 
+      window.location.pathname === '/login.html') {
+    console.log('➡️ Redirecting from login to main app');
     window.location.href = './index.html';
     return;
   }
 
-  // Only initialize app if we're on the main page
+  // Only initialize app if we're on the main page or root
   if (window.location.pathname.endsWith('index.html') || 
       window.location.pathname === '/' || 
-      window.location.pathname.endsWith('/')) {
+      window.location.pathname.endsWith('/') ||
+      window.location.pathname === '' ||
+      window.location.pathname.includes('shukku-list')) {
+    
+    console.log('🚀 Initializing Shukku List app...');
     
     try {
-      // Your existing initialization code...
+      // Step 1: Register for push notifications
+      console.log('📱 Registering FCM token...');
       await registerFCMToken(currentUid);
+
+      // Step 2: Request notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+
+      // Step 3: Ensure user has a pair document (shopping list)
+      console.log('🛍️ Setting up shopping list...');
       await ensurePairDoc(currentUid);
+
+      // Step 4: Check for pending invite codes (if user signed up with partner code)
+      console.log('🔍 Checking for pending invites...');
+      await checkPendingInvite();
+
+      // Step 5: Start real-time listener for the shopping list
+      console.log('📡 Starting real-time listener for pair:', pairId);
       startPairListener(pairId);
+
+      // Step 6: Setup foreground message handling for notifications
+      console.log('🔔 Setting up message handlers...');
       setupOnMessage();
+
+      // Step 7: Initialize UI event listeners
+      console.log('🎨 Initializing UI components...');
       initEventListeners();
-      console.log('App initialized successfully');
+
+      console.log('🎉 App initialized successfully!');
       
     } catch (error) {
-      console.error('App initialization failed:', error);
+      console.error('❌ App initialization failed:', error);
       showError('Failed to initialize app. Please refresh.');
     }
-  }
-
-
-  try {
-    // Register for push notifications
-    await registerFCMToken(currentUid);
-
-    // Request notification permission if not granted
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-
-    // Setup pair document and real-time listener
-    await ensurePairDoc(currentUid);
-    startPairListener(pairId);
-
-    // Setup foreground message handling
-    setupOnMessage();
-
-    // Initialize UI event listeners
-    initEventListeners();
-
-    console.log('App initialized successfully');
-    
-  } catch (error) {
-    console.error('App initialization failed:', error);
-    showError('Failed to initialize app. Please refresh.');
+  } else {
+    console.log('⏸️ Skipping app initialization - not on main page:', window.location.pathname);
   }
 });
 
 /* ===========================
-   Network Status Monitoring
+   Pending Invite Check System
    =========================== */
-window.addEventListener('online', () => {
-  isOnline = true;
-  showSuccess('Back online!', 2000);
-});
-
-window.addEventListener('offline', () => {
-  isOnline = false;
-  showError('You are offline. Some features may not work.', 5000);
-});
-
-/* ===========================
-   Invite System
-   =========================== */
-export async function joinWithInviteCode(code, ownerListId) {
+async function checkPendingInvite() {
   return safeAsyncOperation(async () => {
-    if (!code || !ownerListId) {
-      throw new Error('Invite code and list ID are required');
-    }
-
     if (!currentUid) {
-      throw new Error('You must be logged in to join a list');
+      console.log('⏸️ Skipping invite check - no user ID');
+      return;
     }
 
-    const pairRef = doc(db, 'pairs', ownerListId);
-    const snap = await getDoc(pairRef);
+    console.log('🔍 Checking for pending invites for user:', currentUid);
     
-    if (!snap.exists()) {
-      throw new Error('Shopping list not found');
+    // Check if user has a pending invite code in their profile
+    const userRef = doc(db, 'users', currentUid);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.pendingInviteCode) {
+        console.log('🎯 Found pending invite code:', userData.pendingInviteCode);
+        
+        try {
+          // Try to join the list with the invite code
+          await joinListByInviteCode(userData.pendingInviteCode);
+          
+          // Clear the pending invite code after successful join
+          await updateDoc(userRef, {
+            pendingInviteCode: null,
+            updatedAt: new Date().toISOString()
+          });
+          
+          console.log('✅ Successfully joined list and cleared pending invite');
+          showSuccess('Successfully joined your partner\'s shopping list!');
+          
+        } catch (joinError) {
+          console.warn('❌ Failed to join with pending invite:', joinError);
+          showError('Failed to join partner list. The invite code may be invalid or expired.');
+          
+          // Clear invalid pending invite code
+          await updateDoc(userRef, {
+            pendingInviteCode: null,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } else {
+        console.log('✅ No pending invites found');
+      }
+    } else {
+      console.log('⚠️ User document not found, skipping invite check');
     }
-    
-    const data = snap.data();
-    if (String(data.inviteCode) !== String(code)) {
-      throw new Error('Invalid invite code');
-    }
-
-    // Add current user to users array
-    await updateDoc(pairRef, { 
-      users: arrayUnion(currentUid),
-      updatedAt: Date.now()
-    });
-
-    // Set local listId
-    localStorage.setItem('listId', ownerListId);
-    pairId = ownerListId;
-    
-    // Restart listener with new pairId
-    startPairListener(pairId);
-
-    showSuccess('Successfully joined the shopping list!');
-    
-  }, 'Failed to join shopping list');
+  }, 'Error checking pending invites');
 }
 
 /* ===========================
-   Cleanup on Unload
+   Invite Code Joining Function
    =========================== */
-window.addEventListener('beforeunload', () => {
-  unsubscribePairListener();
-});
+async function joinListByInviteCode(inviteCode) {
+  return safeAsyncOperation(async () => {
+    if (!inviteCode || !/^\d{6}$/.test(inviteCode)) {
+      throw new Error('Invalid invite code format');
+    }
 
-// Global error handler
-window.addEventListener('error', (e) => {
-  console.error('Global error:', e.error);
-  showError('Something went wrong. Please refresh the page.');
-});
-
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('Unhandled promise rejection:', e.reason);
-  showError('Something went wrong. Please try again.');
-});
-
-// Utility function for other modules
-async function getUserIdToken() {
-  try {
-    if (!auth || !auth.currentUser) return null;
-    return await getIdToken(auth.currentUser, false);
-  } catch (e) {
-    console.warn('Failed to get id token', e);
-    return null;
-  }
+    console.log('🔎 Searching for list with invite code:', inviteCode);
+    
+    // We need to query pairs by inviteCode
+    // Note: This requires a Firestore index on inviteCode
+    const pairsRef = collection(db, 'pairs');
+    const q = query(pairsRef, where('inviteCode', '==', inviteCode));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      throw new Error('No list found with this invite code');
+    }
+    
+    // Get the first matching list (should be only one)
+    const pairDoc = querySnapshot.docs[0];
+    const pairData = pairDoc.data();
+    const listId = pairDoc.id;
+    
+    console.log('✅ Found list:', listId, 'with data:', pairData);
+    
+    // Verify the current user is not already in the list
+    if (pairData.users && pairData.users.includes(currentUid)) {
+      throw new Error('You are already a member of this list');
+    }
+    
+    // Add current user to the list
+    await updateDoc(doc(db, 'pairs', listId), {
+      users: arrayUnion(currentUid),
+      updatedAt: Date.now()
+    });
+    
+    // Update local state
+    pairId = listId;
+    localStorage.setItem('listId', listId);
+    
+    // Restart listener with the new list
+    startPairListener(pairId);
+    
+    showSuccess(`Successfully joined ${pairData.listName || 'the shopping list'}!`);
+    
+    return listId;
+    
+  }, 'Failed to join the list');
 }
