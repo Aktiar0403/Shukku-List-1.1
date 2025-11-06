@@ -1,4 +1,3 @@
-// firebase-config.js
 // Browser-friendly modular Firebase imports (works without bundler)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
@@ -15,9 +14,25 @@ const firebaseConfig = {
   measurementId: "G-7SW8GVLQ90"
 };
 
-const app = initializeApp(firebaseConfig);
-try { const analytics = getAnalytics(app); } catch(e) { /* analytics may fail in non-supported env */ }
+// Initialize Firebase with error handling
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+  console.log("Firebase initialized successfully");
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+  throw new Error("Failed to initialize Firebase");
+}
 
+// Initialize services with error handling
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Optional analytics - only initialize if supported
+try {
+  const analytics = getAnalytics(app);
+} catch (e) {
+  console.log("Analytics not supported in this environment");
+}
+
 export default app;

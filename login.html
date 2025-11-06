@@ -11,37 +11,120 @@
   <!-- PWA manifest & icons -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
+  
+  <style>
+    .auth-form { transition: all 0.3s ease; }
+    .btn-primary { transition: background-color 0.2s ease; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error-shake { animation: shake 0.5s ease-in-out; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center font-sans">
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center font-sans p-4">
 
-  <div class="bg-white p-6 rounded shadow w-80">
-    <h2 class="text-xl font-semibold mb-4 text-center">Welcome to Shukku</h2>
+  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+    <!-- App Logo/Header -->
+    <div class="text-center mb-8">
+      <div class="flex items-center justify-center mb-4">
+        <img src="icons/icon-192.png" alt="Shukku Logo" class="w-12 h-12 rounded-lg shadow">
+        <h1 class="text-2xl font-bold text-gray-800 ml-3">Shukku List</h1>
+      </div>
+      <p class="text-gray-600 text-sm">Shared shopping lists for couples & pairs</p>
+    </div>
 
     <!-- Choice buttons -->
-    <div id="auth-choice" class="flex justify-between mb-4">
-      <button onclick="showLogin()" class="flex-1 bg-blue-600 text-white py-2 rounded mr-2">Log In</button>
-      <button onclick="showSignup()" class="flex-1 border py-2 rounded ml-2">Sign Up</button>
+    <div id="auth-choice" class="flex bg-gray-100 p-1 rounded-lg mb-6">
+      <button onclick="showLogin()" id="login-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 bg-white shadow-sm text-blue-600">Log In</button>
+      <button onclick="showSignup()" id="signup-tab" class="flex-1 py-3 px-4 rounded-md font-medium transition-all duration-200 text-gray-600 hover:text-gray-800">Sign Up</button>
     </div>
 
     <!-- Login Form -->
-    <form id="login-form" style="display:none;" class="space-y-2">
-      <input id="login-email" type="email" placeholder="Email" class="w-full p-2 border rounded" required>
-      <input id="login-password" type="password" placeholder="Password" class="w-full p-2 border rounded" required>
-      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded">Log In</button>
-      <p class="text-sm text-gray-500 mt-1 text-center">Don't have an account? <span class="text-blue-600 cursor-pointer" onclick="showSignup()">Sign Up</span></p>
+    <form id="login-form" style="display:none;" class="auth-form space-y-4">
+      <div>
+        <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input id="login-email" type="email" placeholder="your@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <div>
+        <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="login-password" type="password" placeholder="Your password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <button type="submit" id="login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold btn-primary transition-colors">
+        <span id="login-text">Log In</span>
+        <span id="login-loading" class="hidden">Signing in...</span>
+      </button>
+      
+      <p class="text-center text-sm text-gray-600 mt-4">
+        Don't have an account? 
+        <button type="button" class="text-blue-600 font-medium hover:text-blue-800 transition-colors" onclick="showSignup()">Sign Up</button>
+      </p>
     </form>
 
     <!-- Signup Form -->
-    <form id="signup-form" style="display:none;" class="space-y-2">
-      <input id="signup-name" type="text" placeholder="Full Name" class="w-full p-2 border rounded" required>
-      <input id="signup-email" type="email" placeholder="Email" class="w-full p-2 border rounded" required>
-      <input id="signup-password" type="password" placeholder="Password" class="w-full p-2 border rounded" required>
-      <input id="partner-code" type="text" placeholder="Partner Code (optional)" class="w-full p-2 border rounded">
-      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded">Sign Up</button>
-      <p class="text-sm text-gray-500 mt-1 text-center">Already have an account? <span class="text-blue-600 cursor-pointer" onclick="showLogin()">Log In</span></p>
+    <form id="signup-form" style="display:none;" class="auth-form space-y-4">
+      <div>
+        <label for="signup-name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+        <input id="signup-name" type="text" placeholder="Your full name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <div>
+        <label for="signup-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <input id="signup-email" type="email" placeholder="your@email.com" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+      </div>
+      
+      <div>
+        <label for="signup-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="signup-password" type="password" placeholder="At least 6 characters" minlength="6" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" required>
+        <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+      </div>
+      
+      <div>
+        <label for="partner-code" class="block text-sm font-medium text-gray-700 mb-1">Partner Code (Optional)</label>
+        <input id="partner-code" type="text" placeholder="6-digit code from your partner" pattern="[0-9]{6}" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+        <p class="text-xs text-gray-500 mt-1">If you're joining an existing list</p>
+      </div>
+      
+      <button type="submit" id="signup-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold btn-primary transition-colors">
+        <span id="signup-text">Create Account</span>
+        <span id="signup-loading" class="hidden">Creating account...</span>
+      </button>
+      
+      <p class="text-center text-sm text-gray-600 mt-4">
+        Already have an account? 
+        <button type="button" class="text-blue-600 font-medium hover:text-blue-800 transition-colors" onclick="showLogin()">Log In</button>
+      </p>
     </form>
 
-    <p id="error" class="text-red-500 text-sm mt-2 text-center"></p>
+    <!-- Error Display -->
+    <div id="error" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm hidden"></div>
+
+    <!-- App Features -->
+    <div class="mt-8 pt-6 border-t border-gray-200">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Why Shukku List?</h3>
+      <div class="grid grid-cols-2 gap-3 text-xs text-gray-600">
+        <div class="flex items-center">
+          <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
+          Real-time sync
+        </div>
+        <div class="flex items-center">
+          <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
+          Smart URL preview
+        </div>
+        <div class="flex items-center">
+          <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
+          Push notifications
+        </div>
+        <div class="flex items-center">
+          <span class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-2">✓</span>
+          Works offline
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Firebase & Auth scripts -->
@@ -49,19 +132,170 @@
   <script type="module" src="auth.js"></script>
 
   <script>
-    // Toggle functions
+    let currentForm = 'login';
+
+    // Enhanced form toggle functions
     function showLogin() {
       document.getElementById("login-form").style.display = "block";
       document.getElementById("signup-form").style.display = "none";
-      document.getElementById("auth-choice").style.display = "flex";
+      document.getElementById("login-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("login-tab").classList.remove("text-gray-600");
+      document.getElementById("signup-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("signup-tab").classList.add("text-gray-600");
+      document.getElementById("error").classList.add("hidden");
+      currentForm = 'login';
     }
+
     function showSignup() {
       document.getElementById("login-form").style.display = "none";
       document.getElementById("signup-form").style.display = "block";
-      document.getElementById("auth-choice").style.display = "flex";
+      document.getElementById("signup-tab").classList.add("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("signup-tab").classList.remove("text-gray-600");
+      document.getElementById("login-tab").classList.remove("bg-white", "shadow-sm", "text-blue-600");
+      document.getElementById("login-tab").classList.add("text-gray-600");
+      document.getElementById("error").classList.add("hidden");
+      currentForm = 'signup';
     }
 
-    // Make toggle functions global
+    // Enhanced form submission with loading states
+    function setLoading(formType, loading) {
+      const submitBtn = document.getElementById(`${formType}-submit`);
+      const textSpan = document.getElementById(`${formType}-text`);
+      const loadingSpan = document.getElementById(`${formType}-loading`);
+      
+      if (loading) {
+        submitBtn.disabled = true;
+        textSpan.classList.add('hidden');
+        loadingSpan.classList.remove('hidden');
+      } else {
+        submitBtn.disabled = false;
+        textSpan.classList.remove('hidden');
+        loadingSpan.classList.add('hidden');
+      }
+    }
+
+    function showFormError(message) {
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = message;
+      errorEl.classList.remove('hidden');
+      errorEl.classList.add('error-shake');
+      
+      // Remove shake animation after it completes
+      setTimeout(() => {
+        errorEl.classList.remove('error-shake');
+      }, 500);
+    }
+
+    function hideFormError() {
+      const errorEl = document.getElementById('error');
+      errorEl.classList.add('hidden');
+    }
+
+    // Enhanced login form handler
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideFormError();
+      setLoading('login', true);
+
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      try {
+        // Basic validation
+        if (!email || !password) {
+          throw new Error('Please fill in all fields');
+        }
+
+        const { signInUser } = await import('./auth.js');
+        await signInUser(email, password);
+        
+        // Success - redirect will be handled by auth state listener
+        setLoading('login', false);
+        
+      } catch (error) {
+        setLoading('login', false);
+        showFormError(error.message);
+      }
+    });
+
+    // Enhanced signup form handler
+    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideFormError();
+      setLoading('signup', true);
+
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const name = document.getElementById('signup-name').value.trim();
+      const partnerCode = document.getElementById('partner-code').value.trim();
+
+      try {
+        // Enhanced validation
+        if (!email || !password || !name) {
+          throw new Error('Please fill in all required fields');
+        }
+
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters long');
+        }
+
+        if (partnerCode && !/^\d{6}$/.test(partnerCode)) {
+          throw new Error('Partner code must be 6 digits');
+        }
+
+        const { signUpUser } = await import('./auth.js');
+        const user = await signUpUser(email, password, { name });
+        
+        // Handle partner code if provided
+        if (partnerCode) {
+          try {
+            // Note: You'll need to implement the join logic based on your app structure
+            console.log('Partner code provided:', partnerCode);
+            // await joinWithInviteCode(partnerCode, partnerUid);
+          } catch (joinError) {
+            console.warn('Failed to join partner list:', joinError);
+            // Continue with app - user can still join later
+          }
+        }
+
+        setLoading('signup', false);
+        // Success - redirect will be handled by auth state listener
+        
+      } catch (error) {
+        setLoading('signup', false);
+        showFormError(error.message);
+      }
+    });
+
+    // Input validation enhancements
+    document.querySelectorAll('input').forEach(input => {
+      input.addEventListener('input', () => {
+        hideFormError();
+      });
+    });
+
+    // Auto-focus first input when form changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const form = document.getElementById(`${currentForm}-form`);
+          if (form.style.display === 'block') {
+            const firstInput = form.querySelector('input[type="email"], input[type="text"]');
+            if (firstInput) {
+              setTimeout(() => firstInput.focus(), 100);
+            }
+          }
+        }
+      });
+    });
+
+    observer.observe(document.getElementById('login-form'), { attributes: true });
+    observer.observe(document.getElementById('signup-form'), { attributes: true });
+
+    // Initialize with login form
+    showLogin();
+
+    // Make functions global
     window.showLogin = showLogin;
     window.showSignup = showSignup;
   </script>

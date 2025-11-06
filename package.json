@@ -1,7 +1,49 @@
 {
+  "name": "shukku-list",
+  "version": "2.0.0",
+  "description": "Real-time collaborative shopping list app for pairs with PWA support",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'No build step required for vanilla JS app'",
+    "test": "echo 'No tests yet' && exit 0",
+    "lint": "echo 'No linter configured'",
+    "deploy": "echo 'Add your deployment command here'"
+  },
+  "keywords": [
+    "shopping-list",
+    "pwa",
+    "firebase",
+    "real-time",
+    "collaborative",
+    "couples"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
     "node-fetch": "^2.6.7",
     "cheerio": "^1.0.0-rc.12",
-    "firebase-admin": "^11.0.1"
-  }
+    "firebase-admin": "^11.0.1",
+    "metascraper": "^5.0.0",
+    "metascraper-title": "^5.0.0",
+    "metascraper-image": "^5.0.0",
+    "metascraper-description": "^5.0.0",
+    "got": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/shukku-list.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/shukku-list/issues"
+  },
+  "homepage": "https://github.com/yourusername/shukku-list#readme"
 }
