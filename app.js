@@ -793,16 +793,47 @@ function setupOnMessage() {
    Enhanced Auth State Management
    =========================== */
 onAuthStateChanged(auth, async (user) => {
+  console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+  
   if (!user) {
     // Not logged in - redirect to login (but allow login page itself)
     if (!window.location.pathname.endsWith('login.html')) {
-      window.location.href = '/login.html';
+      console.log('No user, redirecting to login');
+      window.location.href = './login.html';
     }
     return;
   }
 
   currentUid = user.uid;
-  console.log('User authenticated:', currentUid);
+  console.log('User authenticated:', currentUid, 'on page:', window.location.pathname);
+
+  // If we're on login page and user is authenticated, redirect to main app
+  if (window.location.pathname.endsWith('login.html')) {
+    console.log('Redirecting from login to main app');
+    window.location.href = './index.html';
+    return;
+  }
+
+  // Only initialize app if we're on the main page
+  if (window.location.pathname.endsWith('index.html') || 
+      window.location.pathname === '/' || 
+      window.location.pathname.endsWith('/')) {
+    
+    try {
+      // Your existing initialization code...
+      await registerFCMToken(currentUid);
+      await ensurePairDoc(currentUid);
+      startPairListener(pairId);
+      setupOnMessage();
+      initEventListeners();
+      console.log('App initialized successfully');
+      
+    } catch (error) {
+      console.error('App initialization failed:', error);
+      showError('Failed to initialize app. Please refresh.');
+    }
+  }
+});
 
   try {
     // Register for push notifications

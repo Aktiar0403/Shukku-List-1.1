@@ -192,30 +192,26 @@
 
     // Enhanced login form handler
     document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      hideFormError();
-      setLoading('login', true);
+  e.preventDefault();
+  hideFormError();
+  setLoading('login', true);
 
-      const email = document.getElementById('login-email').value.trim();
-      const password = document.getElementById('login-password').value;
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
 
-      try {
-        // Basic validation
-        if (!email || !password) {
-          throw new Error('Please fill in all fields');
-        }
-
-        const { signInUser } = await import('./auth.js');
-        await signInUser(email, password);
-        
-        // Success - redirect will be handled by auth state listener
-        setLoading('login', false);
-        
-      } catch (error) {
-        setLoading('login', false);
-        showFormError(error.message);
-      }
-    });
+  try {
+    const { signInUser } = await import('./auth.js');
+    await signInUser(email, password);
+    
+    // Force redirect to main app
+    console.log('Login successful, redirecting...');
+    window.location.href = './index.html';
+    
+  } catch (error) {
+    setLoading('login', false);
+    showFormError(error.message);
+  }
+});
 
     // Enhanced signup form handler
     document.getElementById('signup-form').addEventListener('submit', async (e) => {
@@ -297,7 +293,25 @@
     // Make functions global
     window.showLogin = showLogin;
     window.showSignup = showSignup;
+    // Check if user is already logged in when page loads
+import { getCurrentUser } from './auth.js';
+
+async function checkExistingAuth() {
+  try {
+    const user = getCurrentUser();
+    if (user) {
+      console.log('User already logged in, redirecting to main app');
+      window.location.href = './index.html';
+    }
+  } catch (error) {
+    console.log('No existing auth session');
+  }
+}
+
+// Check on page load
+checkExistingAuth();
   </script>
+  
 
 </body>
 </html>
