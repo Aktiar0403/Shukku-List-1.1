@@ -252,24 +252,34 @@ async function sendNotification(pairIdParam, payload) {
    =========================== */
 async function ensurePairDoc(uid) {
   return safeAsyncOperation(async () => {
+    if (!uid) {
+      throw new Error('User ID is required');
+    }
+
     // Try to get existing list ID from localStorage
     const existingListId = localStorage.getItem('listId');
     
-    if (existingListId) {
-      // Verify the list still exists
-      const pairRef = doc(db, 'pairs', existingListId);
-      const snap = await getDoc(pairRef);
-      
-      if (snap.exists()) {
-        pairId = existingListId;
-        return pairId;
-      } else {
-        // List doesn't exist anymore, create new one
+    if (existingListId && existingListId !== 'null' && existingListId !== 'undefined') {
+      try {
+        // Verify the list still exists
+        const pairRef = doc(db, 'pairs', existingListId);
+        const snap = await getDoc(pairRef);
+        
+        if (snap.exists()) {
+          pairId = existingListId;
+          console.log('Using existing list:', pairId);
+          return pairId;
+        } else {
+          console.log('List no longer exists, creating new one');
+          localStorage.removeItem('listId');
+        }
+      } catch (error) {
+        console.log('Error accessing existing list, creating new one:', error);
         localStorage.removeItem('listId');
       }
     }
 
-    // Create new pair document
+    // Create new pair document using user's UID
     pairId = uid;
     localStorage.setItem('listId', pairId);
 
@@ -277,6 +287,7 @@ async function ensurePairDoc(uid) {
     const snap = await getDoc(pairRef);
     
     if (!snap.exists()) {
+      console.log('Creating new shopping list for user:', uid);
       await setDoc(pairRef, {
         users: [uid],
         items: [],
@@ -284,8 +295,9 @@ async function ensurePairDoc(uid) {
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
+      console.log('New list created with ID:', pairId);
     } else {
-      // Ensure current user is in users array
+      console.log('List already exists, ensuring user is member');
       const data = snap.data();
       if (!data.users || !data.users.includes(uid)) {
         await updateDoc(pairRef, { 
@@ -298,7 +310,6 @@ async function ensurePairDoc(uid) {
     return pairId;
   }, 'Failed to setup your shopping list');
 }
-
 function unsubscribePairListener() {
   if (typeof pairDocUnsubscribe === 'function') {
     pairDocUnsubscribe();
